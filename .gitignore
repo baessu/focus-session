@@ -1,0 +1,16 @@
+# Xcode / build artifacts
+*.xcodeproj/
+build/
+DerivedData/
+.DS_Store
+*.xcuserstate
+.swiftpm/
+
+# Packaging output
+dist/
+
+# Local reference material (not part of the published app)
+ref/
+
+# Claude Code local state
+.claude/
