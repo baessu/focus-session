@@ -2,6 +2,8 @@
 
 집중 세션을 시작하고, 카운트다운을 보고, 끝나면 작업별로 시간을 쌓아 통계로 돌아보는 macOS 네이티브 타이머 앱.
 
+> ⭐ 마음에 드셨다면 오른쪽 위 **Star**를 눌러주세요. 어떤 분들이 관심 있는지 알 수 있는 유일한 신호이고, 앞으로 개선하는 데 큰 힘이 됩니다.
+
 ![타이머 + 타임테이블](docs/screenshot-timer.png)
 
 ![통계 대시보드](docs/screenshot-stats.png)
@@ -50,6 +52,9 @@ xattr -dr com.apple.quarantine /Applications/FocusSession.app
 
 ## 기술 스택
 SwiftUI · SwiftData · Swift Charts · Swift 6 (strict concurrency) · XcodeGen
+
+## 잘 쓰고 계신가요?
+이 앱이 도움이 됐다면 ⭐ **Star** 한 번이면 충분합니다 — 별도 가입이나 결제 없이, 만든 사람에게 가장 확실한 응원이 됩니다. 버그나 제안은 [Issues](../../issues)로 남겨주세요.
 
 ## 라이선스
 [PolyForm Noncommercial 1.0.0](LICENSE) — **비상업적 용도로만** 자유롭게 사용·수정·배포할 수 있습니다. 상업적 이용은 허용되지 않습니다.
