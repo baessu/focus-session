@@ -5,13 +5,20 @@ import AppKit
 @main
 struct FocusSessionApp: App {
     @State private var engine = FocusTimerEngine.shared
+    private let modelContainer: ModelContainer = {
+        do {
+            return try ModelContainerFactory.make()
+        } catch {
+            fatalError("Failed to open FocusSession data store: \(error)")
+        }
+    }()
 
     var body: some Scene {
         WindowGroup {
             RootView()
         }
         .windowResizability(.contentMinSize)
-        .modelContainer(for: [Category.self, Activity.self, FocusSession.self])
+        .modelContainer(modelContainer)
 
         Settings {
             SettingsView()

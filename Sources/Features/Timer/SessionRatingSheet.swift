@@ -21,8 +21,8 @@ struct SessionRatingSheet: View {
             HStack(spacing: 12) {
                 ForEach([FocusRating.distracted, .neutral, .focused]) { r in
                     Button { rating = r } label: {
-                        VStack(spacing: 6) {
-                            Text(r.emoji).font(.system(size: 30))
+                        VStack(spacing: 8) {
+                            FocusBars(rating: r, maxHeight: 26)
                             Text(r.label).font(.caption)
                         }
                         .frame(maxWidth: .infinity)

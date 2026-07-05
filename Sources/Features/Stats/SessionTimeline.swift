@@ -56,7 +56,7 @@ private struct SessionRow: View {
                         .background(color.opacity(0.16), in: .capsule)
                     }
                     Spacer(minLength: 4)
-                    Text(session.rating.emoji).font(.caption)
+                    FocusBars(rating: session.rating, maxHeight: 12)
                 }
 
                 HStack {

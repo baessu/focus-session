@@ -28,6 +28,7 @@ final class FocusTimerEngine {
     private var didReachPlanned = false
     private var tickTask: Task<Void, Never>?
 
+    var startedAt: Date? { sessionStartedAt }
     var planned: TimeInterval { TimeInterval(max(0, plannedMinutes) * 60) }
     var remaining: TimeInterval { max(0, planned - elapsed) }
     var isOvertime: Bool { phase != .idle && planned > 0 && elapsed >= planned }

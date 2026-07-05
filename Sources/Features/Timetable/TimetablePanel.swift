@@ -4,9 +4,11 @@ import AppKit
 
 /// Right-rail day timetable. Lays out finished sessions as schedule blocks for a
 /// chosen day; overlapping blocks split into side-by-side columns. Tap a block to
-/// edit it, or tap an empty slot to add a session at that time.
+/// edit it, tap an empty slot to add a default session, or drag across empty space
+/// to add one spanning exactly that time range.
 struct TimetablePanel: View {
     @State private var day: Date = Calendar.current.startOfDay(for: Date())
+    @State private var pendingNow = false
 
     private var isToday: Bool {
         Calendar.current.isDate(day, inSameDayAs: Date())
@@ -16,7 +18,7 @@ struct TimetablePanel: View {
         VStack(spacing: 0) {
             header
             Divider()
-            TimetableDay(day: day).id(day)
+            TimetableDay(day: day, pendingNow: $pendingNow).id(day)
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -36,6 +38,10 @@ struct TimetablePanel: View {
 
             Spacer()
 
+            Button { jumpToNow() } label: { Image(systemName: "scope") }
+                .buttonStyle(.borderless)
+                .help("Jump to now")
+
             if !isToday {
                 Button("Today") { day = Calendar.current.startOfDay(for: Date()) }
                     .buttonStyle(.borderless)
@@ -53,6 +59,13 @@ struct TimetablePanel: View {
             day = d
         }
     }
+
+    /// Switch to today (if needed) and scroll the timetable to the current time.
+    private func jumpToNow() {
+        let today = Calendar.current.startOfDay(for: Date())
+        if day != today { day = today }
+        pendingNow = true
+    }
 }
 
 private struct TimetableDay: View {
@@ -60,15 +73,19 @@ private struct TimetableDay: View {
     @Environment(\.modelContext) private var context
     @Query private var sessions: [FocusSession]
     @Query(sort: \Category.sortOrder) private var categories: [Category]
+    @Binding var pendingNow: Bool
     @State private var editing: FocusSession?
+    @State private var dragStartY: CGFloat?
+    @State private var dragCurrentY: CGFloat?
 
     private let hourHeight: CGFloat = 58
     private let gutter: CGFloat = 50
     private let blockSpacing: CGFloat = 3
     private var ptPerMinute: CGFloat { hourHeight / 60 }
 
-    init(day: Date) {
+    init(day: Date, pendingNow: Binding<Bool>) {
         self.day = day
+        self._pendingNow = pendingNow
         let cal = Calendar.current
         let start = cal.startOfDay(for: day)
         let end = cal.date(byAdding: .day, value: 1, to: start) ?? start
@@ -87,11 +104,11 @@ private struct TimetableDay: View {
                     ZStack(alignment: .topLeading) {
                         Color.clear
                             .contentShape(Rectangle())
-                            .gesture(
-                                SpatialTapGesture()
-                                    .onEnded { value in addSession(atY: value.location.y) }
-                            )
+                            .gesture(createGesture)
                         hourGrid.allowsHitTesting(false)
+                        if let draft {
+                            draftBlock(draft, width: geo.size.width).allowsHitTesting(false)
+                        }
                         ForEach(layout(width: geo.size.width), id: \.session.id) { item in
                             SessionBlockView(
                                 session: item.session,
@@ -106,6 +123,7 @@ private struct TimetableDay: View {
                             nowLine.allowsHitTesting(false)
                         }
                     }
+                    .coordinateSpace(.named("grid"))
                 }
                 .frame(height: hourHeight * 24)
                 .padding(.vertical, 6)
@@ -116,11 +134,24 @@ private struct TimetableDay: View {
                 if sessions.isEmpty {
                     VStack(spacing: 4) {
                         Text("No sessions").font(.callout).foregroundStyle(.tertiary)
-                        Text("Tap a slot to add one").font(.caption2).foregroundStyle(.quaternary)
+                        Text("Tap or drag to add a session").font(.caption2).foregroundStyle(.quaternary)
                     }
                 }
             }
-            .task { scrollToFocus(proxy) }
+            .task {
+                if pendingNow {
+                    scrollToNow(proxy)
+                    pendingNow = false
+                } else {
+                    scrollToFocus(proxy)
+                }
+            }
+            .onChange(of: pendingNow) { _, requested in
+                if requested {
+                    scrollToNow(proxy)
+                    pendingNow = false
+                }
+            }
         }
         .sheet(item: $editing) { session in
             BlockEditor(session: session) { editing = nil }
@@ -229,25 +260,98 @@ private struct TimetableDay: View {
         proxy.scrollTo(max(0, hour - 1), anchor: .top)
     }
 
-    // MARK: - Add session from an empty slot
+    private func scrollToNow(_ proxy: ScrollViewProxy) {
+        let hour = Calendar.current.component(.hour, from: Date())
+        withAnimation(.easeInOut(duration: 0.35)) {
+            proxy.scrollTo(hour, anchor: .center)
+        }
+    }
 
-    private func addSession(atY y: CGFloat) {
+    // MARK: - Create session (click = default length, drag = dragged length)
+
+    /// One gesture handles both: a plain click (no drag) makes a default-length
+    /// block; a drag makes a block spanning exactly the dragged range. Reported
+    /// in the "grid" space so the created time lines up with the blocks.
+    private var createGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named("grid"))
+            .onChanged { value in
+                if dragStartY == nil { dragStartY = value.startLocation.y }
+                dragCurrentY = value.location.y
+            }
+            .onEnded { value in
+                createSession(fromY: dragStartY ?? value.startLocation.y, toY: value.location.y)
+                dragStartY = nil
+                dragCurrentY = nil
+            }
+    }
+
+    private func minutes(atY y: CGFloat) -> Double {
+        Double(max(0, y)) / Double(ptPerMinute)
+    }
+
+    private func snap5(_ minutes: Double) -> Int {
+        Int((minutes / 5).rounded()) * 5
+    }
+
+    private func createSession(fromY: CGFloat, toY: CGFloat) {
         let cal = Calendar.current
-        let rawMinutes = Int(y / ptPerMinute)
-        let snapped = max(0, min(24 * 60 - 25, (rawMinutes / 5) * 5))
-        let start = cal.date(byAdding: .minute, value: snapped, to: cal.startOfDay(for: day)) ?? day
-        let defaultMinutes = 25
+        let lowMinutes = minutes(atY: min(fromY, toY))
+        let highMinutes = minutes(atY: max(fromY, toY))
+        let span = highMinutes - lowMinutes
+        // Treat a near-zero drag as a click → default 25-minute block.
+        let duration = span < 3 ? 25 : max(5, snap5(span))
+        let startMin = max(0, min(24 * 60 - duration, snap5(lowMinutes)))
+        let start = cal.date(byAdding: .minute, value: startMin, to: cal.startOfDay(for: day)) ?? day
         let session = FocusSession(
             startedAt: start,
-            endedAt: start.addingTimeInterval(Double(defaultMinutes * 60)),
-            plannedMinutes: defaultMinutes,
-            elapsedSeconds: defaultMinutes * 60,
+            endedAt: start.addingTimeInterval(Double(duration * 60)),
+            plannedMinutes: duration,
+            elapsedSeconds: duration * 60,
             outcome: .endedEarly,
             activity: nil
         )
         context.insert(session)
         try? context.save()
         editing = session
+    }
+
+    // MARK: - Live drag preview
+
+    private struct DraftBlock {
+        let y: CGFloat
+        let height: CGFloat
+        let label: String
+    }
+
+    private var draft: DraftBlock? {
+        guard let s = dragStartY, let c = dragCurrentY else { return nil }
+        let lowMinutes = minutes(atY: min(s, c))
+        let highMinutes = minutes(atY: max(s, c))
+        guard highMinutes - lowMinutes >= 3 else { return nil }   // clicks don't preview
+        let startMin = max(0, snap5(lowMinutes))
+        let duration = max(5, snap5(highMinutes - lowMinutes))
+        let cal = Calendar.current
+        let start = cal.date(byAdding: .minute, value: startMin, to: cal.startOfDay(for: day)) ?? day
+        let end = start.addingTimeInterval(Double(duration * 60))
+        let label = "\(start.formatted(date: .omitted, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))"
+        return DraftBlock(y: CGFloat(startMin) * ptPerMinute, height: CGFloat(duration) * ptPerMinute, label: label)
+    }
+
+    private func draftBlock(_ draft: DraftBlock, width: CGFloat) -> some View {
+        let laneWidth = max(40, width - gutter - 10)
+        return RoundedRectangle(cornerRadius: 6)
+            .fill(Color.accentColor.opacity(0.18))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.accentColor, lineWidth: 1))
+            .overlay(alignment: .topLeading) {
+                Text(draft.label)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .lineLimit(1)
+            }
+            .frame(width: laneWidth, height: draft.height, alignment: .top)
+            .offset(x: gutter, y: draft.y)
     }
 }
 
@@ -483,13 +587,23 @@ private struct BlockEditor: View {
             }
 
             field("Focus") {
-                Picker("Focus", selection: $rating) {
+                HStack(spacing: 8) {
                     ForEach(FocusRating.allCases) { r in
-                        Text("\(r.emoji)").tag(r)
+                        Button { rating = r } label: {
+                            VStack(spacing: 5) {
+                                FocusBars(rating: r, maxHeight: 16)
+                                Text(r.label).font(.caption2)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(rating == r ? r.tint.opacity(0.16) : Color.primary.opacity(0.05),
+                                        in: .rect(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8)
+                                .stroke(rating == r ? r.tint : .clear, lineWidth: 1.5))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
 
             field("Note") {

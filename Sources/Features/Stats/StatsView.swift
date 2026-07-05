@@ -103,6 +103,7 @@ private struct RangedStatsContent: View {
         VStack(alignment: .leading, spacing: 24) {
             MetricCards(metrics: metrics)
             RatingRow(metrics: metrics)
+            BestFocusTimeChart(metrics: metrics)
             CategoryDonut(agg: agg, metrics: metrics)
             DailyStackedChart(agg: agg, avgPerDaySeconds: metrics.avgPerDaySeconds)
             TaskRankBar(agg: agg)
@@ -136,6 +137,85 @@ private struct RangedStatsContent: View {
             }
             .buttonStyle(.borderless)
             .help("Export sessions as CSV")
+        }
+    }
+}
+
+// MARK: - Best focus time
+
+private struct BestFocusTimeChart: View {
+    let metrics: StatsMetrics
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle("Best focus time")
+                Spacer()
+                if let best = metrics.bestFocusHour {
+                    Text("\(metrics.hourLabel(best.hour)) · \(best.roundedScore)% focus")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if metrics.focusHours.count == 1, let only = metrics.focusHours.first {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(metrics.hourLabel(only.hour))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                        Text("\(only.sessionCount) session\(only.sessionCount == 1 ? "" : "s") · \(formatDurationShort(seconds: only.seconds))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text("\(only.roundedScore)%")
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                }
+                .padding(14)
+                .background(Color.primary.opacity(0.045), in: .rect(cornerRadius: 12))
+            } else {
+                Chart(metrics.focusHours) { bucket in
+                    BarMark(
+                        x: .value("Hour", bucket.hour),
+                        y: .value("Focus score", bucket.score)
+                    )
+                    .foregroundStyle(bucket.hour == metrics.bestFocusHour?.hour ? Color.accentColor : Color.primary.opacity(0.28))
+                    .cornerRadius(3)
+                    .annotation(position: .top) {
+                        if bucket.hour == metrics.bestFocusHour?.hour {
+                            Text("\(bucket.roundedScore)%")
+                                .font(.caption2.monospacedDigit().weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .chartYScale(domain: 0...100)
+                .chartYAxisLabel("focus")
+                .chartXAxis {
+                    AxisMarks(values: Array(stride(from: 0, through: 21, by: 3))) { value in
+                        AxisGridLine()
+                        AxisTick()
+                        AxisValueLabel {
+                            if let hour = value.as(Int.self) {
+                                Text(metrics.hourLabel(hour))
+                            }
+                        }
+                    }
+                }
+                .frame(height: 160)
+
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkline")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Score weights your focus rating by focused time in each start hour.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            }
         }
     }
 }

@@ -45,10 +45,19 @@ struct TimerView: View {
                     .scrollIndicators(.hidden)
                     .transition(.opacity)
                 } else {
-                    ActiveCard(engine: engine, accent: accent) { result in
-                        if result.focusedSeconds > 0 { pendingResult = result }
+                    GeometryReader { geo in
+                        ScrollView {
+                            ActiveCard(engine: engine, accent: accent) { result in
+                                if result.focusedSeconds > 0 { pendingResult = result }
+                            }
+                            .padding(28)
+                            // Center the ring vertically in the window; still
+                            // scrolls if the window is shorter than the content.
+                            .frame(maxWidth: .infinity, minHeight: geo.size.height)
+                            .removeScrollers()
+                        }
+                        .scrollIndicators(.hidden)
                     }
-                    .padding(28)
                     .transition(.opacity)
                 }
             }
@@ -70,8 +79,21 @@ struct TimerView: View {
                 if oldPhase == .idle { SoundManager.playStart() }
                 notif.requestAuthorizationIfNeeded()
                 notif.scheduleCompletion(after: engine.remaining, taskName: engine.taskName)
+                PresenceService.shared.publish(engine: engine, categoryColor: selectedCategory?.colorHex)
             case .paused, .idle:
                 notif.cancelCompletion()
+                if newPhase == .paused {
+                    PresenceService.shared.publish(engine: engine, categoryColor: selectedCategory?.colorHex)
+                } else {
+                    PresenceService.shared.clearCurrent()
+                }
+            }
+        }
+        .task(id: engine.phase) {
+            guard engine.phase != .idle else { return }
+            while !Task.isCancelled && engine.phase != .idle {
+                PresenceService.shared.publish(engine: engine, categoryColor: selectedCategory?.colorHex)
+                try? await Task.sleep(for: .seconds(20))
             }
         }
     }
@@ -110,6 +132,13 @@ struct TimerView: View {
         session.note = [userNote, autoNote].filter { !$0.isEmpty }.joined(separator: "\n")
         context.insert(session)
         try? context.save()
+        PresenceService.shared.publishCompletedSession(
+            result: result,
+            elapsedSeconds: elapsed,
+            endedAt: endedAt,
+            rating: rating,
+            categoryColor: category?.colorHex
+        )
     }
 
     private func findOrCreateActivity(name: String, category: Category?) -> Activity {
@@ -365,6 +394,7 @@ private struct ActiveCard: View {
     @Bindable var engine: FocusTimerEngine
     var accent: Color
     var onEnd: (SessionResult) -> Void
+    @State private var confirmingCancel = false
 
     var body: some View {
         VStack(spacing: 30) {
@@ -377,26 +407,43 @@ private struct ActiveCard: View {
             )
             .frame(width: 240, height: 240)
 
-            HStack(spacing: 14) {
-                Button {
-                    engine.phase == .paused ? engine.resume() : engine.pause()
-                } label: {
-                    Label(engine.phase == .paused ? "Resume" : "Pause",
-                          systemImage: engine.phase == .paused ? "play.fill" : "pause.fill")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                }
-                .buttonStyle(.bordered)
+            VStack(spacing: 12) {
+                HStack(spacing: 14) {
+                    Button {
+                        engine.phase == .paused ? engine.resume() : engine.pause()
+                    } label: {
+                        Label(engine.phase == .paused ? "Resume" : "Pause",
+                              systemImage: engine.phase == .paused ? "play.fill" : "pause.fill")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.bordered)
 
-                Button { onEnd(engine.end()) } label: {
-                    Label("End session", systemImage: "stop.fill")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                    Button { onEnd(engine.end()) } label: {
+                        Label("End session", systemImage: "stop.fill")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(accent)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(accent)
+
+                Button(role: .destructive) {
+                    confirmingCancel = true
+                } label: {
+                    Text("Cancel session")
+                        .font(.callout)
+                }
+                .buttonStyle(.borderless)
             }
             .frame(maxWidth: 320)
+        }
+        .confirmationDialog("Cancel this focus session?",
+                            isPresented: $confirmingCancel, titleVisibility: .visible) {
+            Button("Cancel session", role: .destructive) { engine.reset() }
+            Button("Keep focusing", role: .cancel) { }
+        } message: {
+            Text("Your focus time won't be saved.")
         }
     }
 

@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 import AppKit
 
-enum AppTab: Hashable { case timer, stats }
+enum AppTab: Hashable { case timer, stats, community }
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
@@ -27,6 +27,9 @@ struct RootView: View {
                     }
                     Tab("Stats", systemImage: "chart.bar.xaxis", value: AppTab.stats) {
                         StatsView()
+                    }
+                    Tab("Community", systemImage: "person.2", value: AppTab.community) {
+                        CommunityView()
                     }
                 }
                 .frame(minWidth: leftMinWidth, maxWidth: .infinity)

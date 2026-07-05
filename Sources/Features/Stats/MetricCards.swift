@@ -56,12 +56,11 @@ struct RatingRow: View {
         HStack(spacing: 0) {
             ForEach([FocusRating.focused, .neutral, .distracted]) { rating in
                 VStack(spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: rating.arrow).font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                    HStack(spacing: 7) {
+                        FocusBars(rating: rating, maxHeight: 14)
                         Text("\(metrics.ratingCounts[rating.rawValue] ?? 0)")
                             .font(.title3.weight(.semibold))
                             .monospacedDigit()
-                        Text(rating.emoji)
                     }
                     Text(rating.label).font(.caption2).foregroundStyle(.secondary)
                 }
