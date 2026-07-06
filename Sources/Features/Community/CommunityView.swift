@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// "Jul 1 – Jul 7" — the Mon…Sun (locale) week the leaderboards cover.
+private func currentWeekSpanLabel() -> String {
+    let cal = Calendar.current
+    guard let interval = cal.dateInterval(of: .weekOfYear, for: Date()) else { return "" }
+    let end = cal.date(byAdding: .day, value: -1, to: interval.end) ?? interval.end
+    return "\(interval.start.formatted(.dateTime.month().day())) – \(end.formatted(.dateTime.month().day()))"
+}
+
 struct CommunityView: View {
     @State private var presence = PresenceService.shared
     private let splitBreakpoint: CGFloat = 720
@@ -109,15 +117,9 @@ private struct FocusingNowSection: View {
                     title: "Community is offline",
                     message: "Add your Supabase details in Settings to see who else is focusing."
                 )
-            } else if !presence.hasLoadedPeers {
-                PlaceholderRows(count: 2)
-            } else if presence.peers.isEmpty {
-                EmptyStateRow(
-                    icon: "moon.zzz",
-                    title: "It's quiet right now",
-                    message: "Start a session and you'll show up here for others."
-                )
             } else {
+                // Always show the radar — with the center hub and rings — even
+                // when no one else is focusing.
                 FocusRadar(peers: presence.peers)
             }
         }
@@ -168,14 +170,22 @@ private struct FocusRadar: View {
             }
             .frame(minHeight: minRadar, maxHeight: .infinity)
 
-            Text(hovered.map(detail) ?? "Hover a dot to see what they're working on.")
+            Text(captionText)
                 .font(.caption2)
                 .foregroundStyle(hovered == nil ? .tertiary : .secondary)
-                .lineLimit(1)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .animation(.easeInOut(duration: 0.15), value: hovered)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var captionText: String {
+        if let hovered { return detail(hovered) }
+        return peers.isEmpty
+            ? "It's quiet — start a session to light up the radar."
+            : "Hover a dot to see what they're working on."
     }
 
     private func detail(_ peer: PresencePeer) -> String {
@@ -351,11 +361,11 @@ private struct WeeklyLeaderboardSection: View {
                 Text("This week")
                     .font(.headline)
                 Spacer()
-                Text("vs last week")
+                Text(currentWeekSpanLabel())
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Text("Ranked by focus time")
+            Text("Ranked by focus time · vs last week")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -494,11 +504,11 @@ private struct StreakLeaderboardSection: View {
                 Text("Longest streaks")
                     .font(.headline)
                 Spacer()
-                Image(systemName: "flame.fill")
+                Text(currentWeekSpanLabel())
                     .font(.caption2)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
             }
-            Text("This week · most consecutive focus days")
+            Text("Most consecutive focus days")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

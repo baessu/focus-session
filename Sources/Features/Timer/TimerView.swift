@@ -19,7 +19,11 @@ struct TimerView: View {
     }
 
     private var accent: Color {
-        Color(hex: selectedCategory?.colorHex ?? "#6366F1")
+        Color(hex: accentHex)
+    }
+
+    private var accentHex: String {
+        selectedCategory?.colorHex ?? "#6366F1"
     }
 
     var body: some View {
@@ -27,27 +31,38 @@ struct TimerView: View {
             Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
             Group {
                 if engine.phase == .idle {
-                    ScrollView {
-                        VStack(spacing: 28) {
-                            SetupCard(
-                                engine: engine,
-                                accent: accent,
-                                categories: activeCategories,
-                                selectedCategoryID: $selectedCategoryID
-                            )
-                            if !completedRecent.isEmpty {
+                    // Setup (with the ring) stays fixed; only Recent scrolls.
+                    VStack(spacing: 0) {
+                        SetupCard(
+                            engine: engine,
+                            accent: accent,
+                            categories: activeCategories,
+                            taskSuggestions: taskSuggestions,
+                            selectedCategoryID: $selectedCategoryID
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 28)
+                        .padding(.bottom, completedRecent.isEmpty ? 28 : 20)
+
+                        if !completedRecent.isEmpty {
+                            ScrollView {
                                 RecentSessionsList(sessions: completedRecent)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.horizontal, 28)
+                                    .padding(.bottom, 24)
+                                    .removeScrollers()
                             }
+                            .scrollIndicators(.hidden)
+                        } else {
+                            Spacer(minLength: 0)
                         }
-                        .padding(28)
-                        .removeScrollers()
                     }
-                    .scrollIndicators(.hidden)
                     .transition(.opacity)
                 } else {
                     GeometryReader { geo in
                         ScrollView {
-                            ActiveCard(engine: engine, accent: accent) { result in
+                            ActiveCard(engine: engine, accent: accent, accentHex: accentHex) { result in
                                 if result.focusedSeconds > 0 { pendingResult = result }
                             }
                             .padding(28)
@@ -89,6 +104,13 @@ struct TimerView: View {
                 }
             }
         }
+        .onChange(of: engine.startedAt) { _, _ in
+            // Start time was corrected → the finish time moved; reschedule.
+            if engine.phase == .running {
+                notif.scheduleCompletion(after: engine.remaining, taskName: engine.taskName)
+            }
+            PresenceService.shared.publish(engine: engine, categoryColor: selectedCategory?.colorHex)
+        }
         .task(id: engine.phase) {
             guard engine.phase != .idle else { return }
             while !Task.isCancelled && engine.phase != .idle {
@@ -100,6 +122,13 @@ struct TimerView: View {
 
     private var completedRecent: [FocusSession] {
         Array(recent.filter { $0.endedAt != nil }.prefix(6))
+    }
+
+    private var taskSuggestions: [TaskSuggestion] {
+        activities.filter { !$0.isArchived }.map {
+            TaskSuggestion(name: $0.name, categoryID: $0.category?.id,
+                           categoryName: $0.category?.name, colorHex: $0.category?.colorHex)
+        }
     }
 
     private func persist(_ result: SessionResult, rating: FocusRating, note: String) {
@@ -159,6 +188,7 @@ private struct SetupCard: View {
     @Bindable var engine: FocusTimerEngine
     var accent: Color
     var categories: [Category]
+    var taskSuggestions: [TaskSuggestion]
     @Binding var selectedCategoryID: PersistentIdentifier?
     private let chips = [15, 25, 45, 60]
 
@@ -172,49 +202,57 @@ private struct SetupCard: View {
                     .foregroundStyle(.secondary)
             }
 
-            if !categories.isEmpty {
-                CategoryPicker(categories: categories, selectedID: $selectedCategoryID)
-            }
+            VStack(spacing: 12) {
+                if !categories.isEmpty {
+                    CategoryPicker(categories: categories, selectedID: $selectedCategoryID)
+                }
 
-            TextField("e.g. Write the report", text: $engine.taskName)
-                .textFieldStyle(.plain)
-                .font(.title3)
-                .multilineTextAlignment(.center)
-                .padding(.vertical, 14)
-                .padding(.horizontal, 18)
-                .background(Color.primary.opacity(0.05), in: .rect(cornerRadius: 12))
-
-            VStack(spacing: 16) {
-                CircularDurationPicker(minutes: $engine.plannedMinutes, accent: accent)
-
-                HStack(spacing: 8) {
-                    ForEach(chips, id: \.self) { value in
-                        let selected = engine.plannedMinutes == value
-                        Button {
-                            withAnimation(.snappy(duration: 0.22)) { engine.plannedMinutes = value }
-                        } label: {
-                            Text("\(value)m")
-                                .font(.callout.weight(.medium))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background(selected ? accent : Color.primary.opacity(0.06),
-                                            in: .rect(cornerRadius: 9))
-                                .foregroundStyle(selected ? .white : .primary)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                SuggestingTextField(
+                    text: $engine.taskName,
+                    placeholder: "e.g. Write the report",
+                    suggestions: taskSuggestions,
+                    large: true
+                ) { picked in
+                    if let cid = picked.categoryID { selectedCategoryID = cid }
                 }
             }
+            .zIndex(1)
 
-            Button { engine.start() } label: {
-                Text("Start")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+            VStack(spacing: 12) {
+                VStack(spacing: 16) {
+                    CircularDurationPicker(minutes: $engine.plannedMinutes, accent: accent)
+                        .padding(.top, 24)
+                        .padding(.bottom, 32)
+
+                    HStack(spacing: 8) {
+                        ForEach(chips, id: \.self) { value in
+                            let selected = engine.plannedMinutes == value
+                            Button {
+                                withAnimation(.snappy(duration: 0.22)) { engine.plannedMinutes = value }
+                            } label: {
+                                Text("\(value)m")
+                                    .font(.callout.weight(.medium))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 9)
+                                    .background(selected ? accent : Color.primary.opacity(0.06),
+                                                in: .rect(cornerRadius: 9))
+                                    .foregroundStyle(selected ? .white : .primary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                Button { engine.start() } label: {
+                    Text("Start")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+                .disabled(!engine.canStart)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(accent)
-            .disabled(!engine.canStart)
         }
         .frame(maxWidth: 380)
     }
@@ -393,19 +431,36 @@ private struct AddCategorySheet: View {
 private struct ActiveCard: View {
     @Bindable var engine: FocusTimerEngine
     var accent: Color
+    var accentHex: String
     var onEnd: (SessionResult) -> Void
     @State private var confirmingCancel = false
+    @AppStorage("timerShowsRemaining") private var showsRemaining = true
+    @AppStorage("miniAccentHex") private var miniAccentHex = "#6366F1"
 
     var body: some View {
-        VStack(spacing: 30) {
-            ProgressRing(
-                progress: engine.progress,
-                accent: accent,
-                isOvertime: engine.isOvertime,
-                label: engine.displayTime,
-                caption: caption
-            )
-            .frame(width: 240, height: 240)
+        VStack(spacing: 15) {
+            VStack(spacing: 24) {
+                ProgressRing(
+                    progress: ringFraction,
+                    accent: accent,
+                    isOvertime: engine.isOvertime,
+                    label: timeText,
+                    caption: caption
+                )
+                .frame(width: 240, height: 240)
+                .contentShape(Circle())
+                .onTapGesture { showsRemaining.toggle() }
+
+                HStack(spacing: 6) {
+                    Image(systemName: "clock")
+                    Text("Started")
+                    DatePicker("", selection: startBinding, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
 
             VStack(spacing: 12) {
                 HStack(spacing: 14) {
@@ -428,13 +483,34 @@ private struct ActiveCard: View {
                     .tint(accent)
                 }
 
+                HStack(spacing: 18) {
+                    Button { showsRemaining.toggle() } label: {
+                        Image(systemName: "arrow.left.arrow.right")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(showsRemaining ? "Show time elapsed" : "Show time remaining")
+
+                    Menu {
+                        Button { minimize(remaining: true) } label: {
+                            Label("Show time remaining", systemImage: "timer")
+                        }
+                        Button { minimize(remaining: false) } label: {
+                            Label("Show time elapsed", systemImage: "stopwatch")
+                        }
+                    } label: {
+                        Label("Minimize", systemImage: "pip.enter").font(.callout)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                }
+
                 Button(role: .destructive) {
                     confirmingCancel = true
                 } label: {
-                    Text("Cancel session")
-                        .font(.callout)
+                    Text("Cancel session").font(.callout)
                 }
                 .buttonStyle(.borderless)
+                .padding(.top, 24)
             }
             .frame(maxWidth: 320)
         }
@@ -451,6 +527,28 @@ private struct ActiveCard: View {
         let name = engine.taskName.trimmingCharacters(in: .whitespacesAndNewlines)
         if engine.phase == .paused { return name.isEmpty ? "Paused" : "Paused · \(name)" }
         return name.isEmpty ? "Focusing" : name
+    }
+
+    private func minimize(remaining: Bool) {
+        showsRemaining = remaining
+        miniAccentHex = accentHex
+        MiniTimerController.shared.minimize()
+    }
+
+    /// Remaining mode → ring drains toward empty; elapsed mode → fills up.
+    private var ringFraction: Double {
+        showsRemaining ? max(0, 1 - engine.progress) : (engine.isOvertime ? 1 : engine.progress)
+    }
+
+    private var timeText: String {
+        showsRemaining ? engine.displayTime : formatClock(engine.elapsed)
+    }
+
+    private var startBinding: Binding<Date> {
+        Binding(
+            get: { engine.startedAt ?? Date() },
+            set: { engine.setStartTime($0) }
+        )
     }
 }
 

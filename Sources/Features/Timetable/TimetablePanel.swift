@@ -72,9 +72,10 @@ private struct TimetableDay: View {
     let day: Date
     @Environment(\.modelContext) private var context
     @Query private var sessions: [FocusSession]
+    @Query private var scheduleBlocks: [ScheduleBlock]
     @Query(sort: \Category.sortOrder) private var categories: [Category]
     @Binding var pendingNow: Bool
-    @State private var editing: FocusSession?
+    @State private var editing: EditorTarget?
     @State private var dragStartY: CGFloat?
     @State private var dragCurrentY: CGFloat?
 
@@ -95,6 +96,25 @@ private struct TimetableDay: View {
             },
             sort: \.startedAt
         )
+        _scheduleBlocks = Query(
+            filter: #Predicate<ScheduleBlock> { b in
+                b.startedAt >= start && b.startedAt < end
+            },
+            sort: \.startedAt
+        )
+    }
+
+    /// Focus sessions and schedule blocks unified for layout & rendering.
+    private var items: [TimetableItem] {
+        let focus = sessions.map {
+            TimetableItem(id: "f-\($0.persistentModelID)", startedAt: $0.startedAt, seconds: $0.elapsedSeconds,
+                          isSchedule: false, focus: $0, schedule: nil)
+        }
+        let schedule = scheduleBlocks.map {
+            TimetableItem(id: "s-\($0.persistentModelID)", startedAt: $0.startedAt, seconds: $0.durationSeconds,
+                          isSchedule: true, focus: nil, schedule: $0)
+        }
+        return focus + schedule
     }
 
     var body: some View {
@@ -109,15 +129,24 @@ private struct TimetableDay: View {
                         if let draft {
                             draftBlock(draft, width: geo.size.width).allowsHitTesting(false)
                         }
-                        ForEach(layout(width: geo.size.width), id: \.session.id) { item in
-                            SessionBlockView(
-                                session: item.session,
-                                rect: item.rect,
-                                ptPerMinute: ptPerMinute,
-                                day: day,
-                                selected: editing?.id == item.session.id,
-                                onTap: { editing = item.session }
-                            )
+                        ForEach(layout(width: geo.size.width), id: \.item.id) { entry in
+                            if let session = entry.item.focus {
+                                SessionBlockView(
+                                    session: session,
+                                    rect: entry.rect,
+                                    ptPerMinute: ptPerMinute,
+                                    day: day,
+                                    selected: editing?.id == entry.item.id,
+                                    onTap: { editing = .focus(session) }
+                                )
+                            } else if let block = entry.item.schedule {
+                                ScheduleBlockView(
+                                    block: block,
+                                    rect: entry.rect,
+                                    selected: editing?.id == entry.item.id,
+                                    onTap: { editing = .schedule(block) }
+                                )
+                            }
                         }
                         if Calendar.current.isDateInToday(day) {
                             nowLine.allowsHitTesting(false)
@@ -131,10 +160,10 @@ private struct TimetableDay: View {
             }
             .scrollIndicators(.hidden)
             .overlay {
-                if sessions.isEmpty {
+                if sessions.isEmpty && scheduleBlocks.isEmpty {
                     VStack(spacing: 4) {
-                        Text("No sessions").font(.callout).foregroundStyle(.tertiary)
-                        Text("Tap or drag to add a session").font(.caption2).foregroundStyle(.quaternary)
+                        Text("Nothing yet").font(.callout).foregroundStyle(.tertiary)
+                        Text("Tap or drag to add a block").font(.caption2).foregroundStyle(.quaternary)
                     }
                 }
             }
@@ -153,8 +182,8 @@ private struct TimetableDay: View {
                 }
             }
         }
-        .sheet(item: $editing) { session in
-            BlockEditor(session: session) { editing = nil }
+        .sheet(item: $editing) { target in
+            BlockEditor(target: target) { editing = nil }
         }
     }
 
@@ -190,45 +219,45 @@ private struct TimetableDay: View {
 
     // MARK: - Column layout for overlapping blocks
 
-    private func layout(width: CGFloat) -> [(session: FocusSession, rect: CGRect)] {
+    private func layout(width: CGFloat) -> [(item: TimetableItem, rect: CGRect)] {
         let laneWidth = max(40, width - gutter - 10)
-        let items = sessions
-            .map { (session: $0, top: yOffset($0), bottom: yOffset($0) + blockHeight($0)) }
+        let placed = items
+            .map { (item: $0, top: yOffset($0.startedAt), bottom: yOffset($0.startedAt) + blockHeight($0.seconds)) }
             .sorted { $0.top < $1.top }
 
-        var result: [(session: FocusSession, rect: CGRect)] = []
+        var result: [(item: TimetableItem, rect: CGRect)] = []
         var i = 0
-        while i < items.count {
+        while i < placed.count {
             // Grow a cluster of visually overlapping blocks.
-            var clusterBottom = items[i].bottom
-            var cluster = [items[i]]
+            var clusterBottom = placed[i].bottom
+            var cluster = [placed[i]]
             var j = i + 1
-            while j < items.count, items[j].top < clusterBottom - 0.5 {
-                clusterBottom = max(clusterBottom, items[j].bottom)
-                cluster.append(items[j])
+            while j < placed.count, placed[j].top < clusterBottom - 0.5 {
+                clusterBottom = max(clusterBottom, placed[j].bottom)
+                cluster.append(placed[j])
                 j += 1
             }
 
             // Greedy column assignment within the cluster.
             var columnBottoms: [CGFloat] = []
             var columnOf: [Int] = []
-            for item in cluster {
-                if let free = columnBottoms.firstIndex(where: { $0 <= item.top + 0.5 }) {
-                    columnBottoms[free] = item.bottom
+            for entry in cluster {
+                if let free = columnBottoms.firstIndex(where: { $0 <= entry.top + 0.5 }) {
+                    columnBottoms[free] = entry.bottom
                     columnOf.append(free)
                 } else {
-                    columnBottoms.append(item.bottom)
+                    columnBottoms.append(entry.bottom)
                     columnOf.append(columnBottoms.count - 1)
                 }
             }
 
             let cols = max(1, columnBottoms.count)
             let colWidth = (laneWidth - blockSpacing * CGFloat(cols - 1)) / CGFloat(cols)
-            for (k, item) in cluster.enumerated() {
+            for (k, entry) in cluster.enumerated() {
                 let x = gutter + CGFloat(columnOf[k]) * (colWidth + blockSpacing)
                 result.append((
-                    item.session,
-                    CGRect(x: x, y: item.top, width: colWidth, height: item.bottom - item.top)
+                    entry.item,
+                    CGRect(x: x, y: entry.top, width: colWidth, height: entry.bottom - entry.top)
                 ))
             }
             i = j
@@ -241,12 +270,12 @@ private struct TimetableDay: View {
         return CGFloat(c.hour ?? 0) * 60 + CGFloat(c.minute ?? 0) + CGFloat(c.second ?? 0) / 60
     }
 
-    private func yOffset(_ session: FocusSession) -> CGFloat {
-        minutesFromDayStart(session.startedAt) * ptPerMinute
+    private func yOffset(_ date: Date) -> CGFloat {
+        minutesFromDayStart(date) * ptPerMinute
     }
 
-    private func blockHeight(_ session: FocusSession) -> CGFloat {
-        max(22, CGFloat(session.elapsedSeconds) / 60 * ptPerMinute)
+    private func blockHeight(_ seconds: Int) -> CGFloat {
+        max(22, CGFloat(seconds) / 60 * ptPerMinute)
     }
 
     private func hourLabel(_ h: Int) -> String {
@@ -312,7 +341,7 @@ private struct TimetableDay: View {
         )
         context.insert(session)
         try? context.save()
-        editing = session
+        editing = .focus(session)
     }
 
     // MARK: - Live drag preview
@@ -352,6 +381,79 @@ private struct TimetableDay: View {
             }
             .frame(width: laneWidth, height: draft.height, alignment: .top)
             .offset(x: gutter, y: draft.y)
+    }
+}
+
+// MARK: - Unified timetable item + editor target
+
+/// A focus session or a schedule block, normalized for layout and rendering.
+private struct TimetableItem: Identifiable {
+    let id: String
+    let startedAt: Date
+    let seconds: Int
+    let isSchedule: Bool
+    let focus: FocusSession?
+    let schedule: ScheduleBlock?
+}
+
+/// What the block editor is editing — used as the sheet item.
+private enum EditorTarget: Identifiable {
+    case focus(FocusSession)
+    case schedule(ScheduleBlock)
+
+    var id: String {
+        switch self {
+        case .focus(let s): return "f-\(s.persistentModelID)"
+        case .schedule(let b): return "s-\(b.persistentModelID)"
+        }
+    }
+}
+
+// MARK: - Schedule block (outline, tap to edit)
+
+private struct ScheduleBlockView: View {
+    let block: ScheduleBlock
+    let rect: CGRect
+    let selected: Bool
+    var onTap: () -> Void
+
+    private var color: Color { Color(hex: block.colorHex) }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 9))
+                        .foregroundStyle(color)
+                    Text(block.title.isEmpty ? "Schedule" : block.title)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                }
+                if rect.height >= 34 {
+                    Text(timeRange)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            Spacer(minLength: 0)
+        }
+        .frame(width: rect.width, height: rect.height, alignment: .top)
+        .background(color.opacity(0.06), in: .rect(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(color.opacity(selected ? 0.9 : 0.55),
+                              style: StrokeStyle(lineWidth: selected ? 2 : 1.2, dash: [4, 3]))
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
+        .offset(x: rect.minX, y: rect.minY)
+    }
+
+    private var timeRange: String {
+        "\(block.startedAt.formatted(date: .omitted, time: .shortened)) – \(block.endedAt.formatted(date: .omitted, time: .shortened))"
     }
 }
 
@@ -523,15 +625,23 @@ private struct SessionBlockView: View {
     }
 }
 
-// MARK: - Block editor
+// MARK: - Block editor (focus or schedule, with type toggle)
+
+private enum BlockKind: Int, CaseIterable, Identifiable {
+    case focus, schedule
+    var id: Int { rawValue }
+    var label: String { self == .focus ? "Focus" : "Schedule" }
+}
 
 private struct BlockEditor: View {
     @Environment(\.modelContext) private var context
-    @Bindable var session: FocusSession
+    let target: EditorTarget
     @Query(sort: \Category.sortOrder) private var categories: [Category]
     @Query private var activities: [Activity]
+    @Query private var scheduleBlocks: [ScheduleBlock]
     var onClose: () -> Void
 
+    @State private var kind: BlockKind = .focus
     @State private var title: String = ""
     @State private var startTime: Date = .now
     @State private var endTime: Date = .now
@@ -540,22 +650,64 @@ private struct BlockEditor: View {
     @State private var note: String = ""
 
     private var durationSeconds: Int { max(0, Int(endTime.timeIntervalSince(startTime))) }
-
     private var activeCategories: [Category] { categories.filter { !$0.isArchived } }
-    private var selectedCategory: Category? {
-        categories.first { $0.id == categoryID } ?? session.activity?.category
+    private var selectedCategory: Category? { categories.first { $0.id == categoryID } }
+    private var tint: Color { Color(hex: selectedCategory?.colorHex ?? "#6366F1") }
+
+    private var taskSuggestions: [TaskSuggestion] {
+        activities.filter { !$0.isArchived }.map {
+            TaskSuggestion(name: $0.name, categoryID: $0.category?.id,
+                           categoryName: $0.category?.name, colorHex: $0.category?.colorHex)
+        }
+    }
+
+    /// Distinct prior schedule titles (most recent first), with their color and
+    /// the matching category (if any) so selecting one restores it.
+    private var scheduleSuggestions: [TaskSuggestion] {
+        var seen = Set<String>()
+        var result: [TaskSuggestion] = []
+        for block in scheduleBlocks.sorted(by: { $0.startedAt > $1.startedAt }) {
+            let title = block.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty, seen.insert(title).inserted else { continue }
+            let match = categories.first { $0.colorHex == block.colorHex }
+            result.append(TaskSuggestion(name: title, categoryID: match?.id,
+                                         categoryName: match?.name, colorHex: block.colorHex))
+        }
+        return result
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Edit session").font(.headline)
-
-            field("Task") {
-                TextField("Task title", text: $title)
-                    .textFieldStyle(.roundedBorder)
+            HStack {
+                Text(kind == .focus ? "Edit focus" : "Edit schedule").font(.headline)
+                Spacer()
+                Button { onClose() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Close")
             }
 
-            field("Category") {
+            Picker("Type", selection: $kind) {
+                ForEach(BlockKind.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            field("Title") {
+                SuggestingTextField(
+                    text: $title,
+                    placeholder: kind == .focus ? "Task title" : "e.g. Team meeting",
+                    suggestions: kind == .focus ? taskSuggestions : scheduleSuggestions
+                ) { picked in
+                    if let cid = picked.categoryID { categoryID = cid }
+                }
+            }
+            .zIndex(1)
+
+            field(kind == .focus ? "Category" : "Color") {
                 Menu {
                     ForEach(activeCategories) { category in
                         Button(category.name) { categoryID = category.id }
@@ -586,55 +738,54 @@ private struct BlockEditor: View {
                     .foregroundStyle(durationSeconds > 0 ? .primary : .secondary)
             }
 
-            field("Focus") {
-                HStack(spacing: 8) {
-                    ForEach(FocusRating.allCases) { r in
-                        Button { rating = r } label: {
-                            VStack(spacing: 5) {
-                                FocusBars(rating: r, maxHeight: 16)
-                                Text(r.label).font(.caption2)
+            if kind == .focus {
+                field("Focus") {
+                    HStack(spacing: 8) {
+                        ForEach(FocusRating.allCases) { r in
+                            Button { rating = r } label: {
+                                VStack(spacing: 5) {
+                                    FocusBars(rating: r, maxHeight: 16)
+                                    Text(r.label).font(.caption2)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(rating == r ? r.tint.opacity(0.16) : Color.primary.opacity(0.05),
+                                            in: .rect(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8)
+                                    .stroke(rating == r ? r.tint : .clear, lineWidth: 1.5))
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .background(rating == r ? r.tint.opacity(0.16) : Color.primary.opacity(0.05),
-                                        in: .rect(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8)
-                                .stroke(rating == r ? r.tint : .clear, lineWidth: 1.5))
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
-            }
 
-            field("Note") {
-                TextField("Note", text: $note, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...3)
+                field("Note") {
+                    TextField("Note", text: $note, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(1...3)
+                }
+            } else {
+                Text("Schedule blocks are shown on the timetable only — they don't count toward focus stats or the community.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Divider()
 
             HStack {
-                Button(role: .destructive) { deleteSession() } label: {
+                Button(role: .destructive) { delete() } label: {
                     Label("Delete", systemImage: "trash")
                 }
                 .buttonStyle(.borderless)
                 Spacer()
                 Button("Done") { commit() }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color(hex: selectedCategory?.colorHex ?? "#6366F1"))
+                    .tint(tint)
             }
         }
         .padding(16)
         .frame(width: 280)
-        .onAppear {
-            title = session.activity?.name ?? ""
-            startTime = session.startedAt
-            endTime = session.endedAt ?? session.startedAt.addingTimeInterval(Double(max(session.elapsedSeconds, 300)))
-            categoryID = session.activity?.category?.id ?? activeCategories.first?.id
-            rating = session.rating
-            note = session.note
-        }
+        .onAppear(perform: load)
     }
 
     private func field<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
@@ -644,45 +795,104 @@ private struct BlockEditor: View {
         }
     }
 
+    // MARK: load / save
+
+    private func load() {
+        switch target {
+        case .focus(let s):
+            kind = .focus
+            title = s.activity?.name ?? ""
+            startTime = s.startedAt
+            endTime = s.endedAt ?? s.startedAt.addingTimeInterval(Double(max(s.elapsedSeconds, 300)))
+            categoryID = s.activity?.category?.id ?? activeCategories.first?.id
+            rating = s.rating
+            note = s.note
+        case .schedule(let b):
+            kind = .schedule
+            title = b.title
+            startTime = b.startedAt
+            endTime = b.endedAt
+            categoryID = categories.first { $0.colorHex == b.colorHex }?.id ?? activeCategories.first?.id
+            rating = .neutral
+            note = ""
+        }
+    }
+
     private func commit() {
-        let newName = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        reassignActivity(to: newName.isEmpty ? "Untitled" : newName, category: selectedCategory)
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeEnd = max(endTime, startTime.addingTimeInterval(60))
-        session.startedAt = startTime
-        session.endedAt = safeEnd
-        session.elapsedSeconds = Int(safeEnd.timeIntervalSince(startTime))
-        session.rating = rating
-        session.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let seconds = Int(safeEnd.timeIntervalSince(startTime))
+        let colorHex = selectedCategory?.colorHex ?? "#8E8E93"
+
+        switch (target, kind) {
+        case (.focus(let s), .focus):
+            reassignActivity(s, to: cleanTitle.isEmpty ? "Untitled" : cleanTitle, category: selectedCategory)
+            s.startedAt = startTime
+            s.endedAt = safeEnd
+            s.elapsedSeconds = seconds
+            s.rating = rating
+            s.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        case (.schedule(let b), .schedule):
+            b.title = cleanTitle.isEmpty ? "Schedule" : cleanTitle
+            b.startedAt = startTime
+            b.endedAt = safeEnd
+            b.colorHex = colorHex
+
+        case (.focus(let s), .schedule):   // convert focus → schedule
+            let old = s.activity
+            context.delete(s)
+            cleanupOrphan(old, excluding: s)
+            context.insert(ScheduleBlock(title: cleanTitle.isEmpty ? "Schedule" : cleanTitle,
+                                         startedAt: startTime, endedAt: safeEnd, colorHex: colorHex))
+
+        case (.schedule(let b), .focus):   // convert schedule → focus
+            context.delete(b)
+            let activity = findOrCreateActivity(name: cleanTitle.isEmpty ? "Untitled" : cleanTitle, category: selectedCategory)
+            let session = FocusSession(startedAt: startTime, endedAt: safeEnd,
+                                       plannedMinutes: max(1, seconds / 60), elapsedSeconds: seconds,
+                                       outcome: .endedEarly, activity: activity)
+            session.rating = rating
+            session.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            context.insert(session)
+        }
+
         try? context.save()
         onClose()
     }
 
-    /// Re-points this session to an Activity matching (name, category), creating
-    /// one if needed, and deletes the previous Activity if left orphaned.
-    private func reassignActivity(to name: String, category: Category?) {
+    private func delete() {
+        switch target {
+        case .focus(let s):
+            let old = s.activity
+            context.delete(s)
+            cleanupOrphan(old, excluding: s)
+        case .schedule(let b):
+            context.delete(b)
+        }
+        try? context.save()
+        onClose()
+    }
+
+    // MARK: activity helpers
+
+    private func findOrCreateActivity(name: String, category: Category?) -> Activity {
+        if let existing = activities.first(where: { $0.name == name && $0.category?.id == category?.id }) {
+            return existing
+        }
+        let created = Activity(name: name, category: category)
+        context.insert(created)
+        return created
+    }
+
+    private func reassignActivity(_ session: FocusSession, to name: String, category: Category?) {
         let old = session.activity
         if old?.name == name && old?.category?.id == category?.id { return }
-
-        let target = activities.first { $0.name == name && $0.category?.id == category?.id }
-            ?? {
-                let created = Activity(name: name, category: category)
-                context.insert(created)
-                return created
-            }()
-
-        session.activity = target
-        cleanupOrphan(old)
+        session.activity = findOrCreateActivity(name: name, category: category)
+        cleanupOrphan(old, excluding: session)
     }
 
-    private func deleteSession() {
-        let old = session.activity
-        context.delete(session)
-        cleanupOrphan(old)
-        try? context.save()
-        onClose()
-    }
-
-    private func cleanupOrphan(_ activity: Activity?) {
+    private func cleanupOrphan(_ activity: Activity?, excluding session: FocusSession) {
         guard let activity else { return }
         let remaining = activity.sessions.filter { $0.persistentModelID != session.persistentModelID }
         if remaining.isEmpty { context.delete(activity) }

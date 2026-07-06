@@ -102,6 +102,16 @@ struct StatsRange: Equatable {
         }
     }
 
+    /// Explicit "from – to" span of the current window (inclusive end).
+    func rangeSpanLabel() -> String {
+        let cal = Self.cal
+        let b = bounds()
+        let end = cal.date(byAdding: .day, value: -1, to: b.upper) ?? b.upper
+        let start = b.lower.formatted(.dateTime.month().day())
+        let endStr = end.formatted(.dateTime.month().day())
+        return start == endStr ? start : "\(start) – \(endStr)"
+    }
+
     /// Short two-line label for the surrounding-period chip strip.
     func chipLines() -> (top: String, bottom: String) {
         let cal = Self.cal

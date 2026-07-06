@@ -3,7 +3,7 @@ import SwiftData
 
 enum ModelContainerFactory {
     static func make() throws -> ModelContainer {
-        let schema = Schema([Category.self, Activity.self, FocusSession.self])
+        let schema = Schema([Category.self, Activity.self, FocusSession.self, ScheduleBlock.self])
         let storeURL = stableStoreURL()
         try prepareStore(at: storeURL)
         let config = ModelConfiguration(schema: schema, url: storeURL)

@@ -18,7 +18,7 @@ struct ProgressRing: View {
                 .stroke(Color.primary.opacity(0.08), lineWidth: 14)
 
             Circle()
-                .trim(from: 0, to: isOvertime ? 1 : max(0.0001, progress))
+                .trim(from: 0, to: max(0.0001, progress))
                 .stroke(accent.opacity(isOvertime ? 0.9 : 1),
                         style: StrokeStyle(lineWidth: 14, lineCap: .round))
                 .rotationEffect(.degrees(-90))

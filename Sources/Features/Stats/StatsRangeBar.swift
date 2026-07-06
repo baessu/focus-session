@@ -32,6 +32,10 @@ struct StatsRangeBar: View {
                     .opacity(range.isNavigable ? 1 : 0.3)
             }
 
+            Text(range.rangeSpanLabel())
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             if range.isNavigable {
                 HStack(spacing: 8) {
                     ForEach(Array(range.chips().enumerated()), id: \.offset) { _, chip in

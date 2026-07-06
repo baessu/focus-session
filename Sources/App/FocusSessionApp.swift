@@ -38,8 +38,10 @@ private struct MenuBarLabel: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: engine.isOvertime ? "timer" : "timer")
-            Text(engine.displayTime).monospacedDigit()
+            Image(systemName: "timer")
+            Text(engine.displayTime)
+                .monospacedDigit()
+                .frame(minWidth: 46, alignment: .center)
         }
     }
 }

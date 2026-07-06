@@ -33,6 +33,9 @@ struct RootView: View {
                     }
                 }
                 .frame(minWidth: leftMinWidth, maxWidth: .infinity)
+                // Match the tab header strip to the content's window tone.
+                .toolbarBackground(Color(nsColor: .windowBackgroundColor), for: .windowToolbar)
+                .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
 
                 if showRail {
                     ResizableDivider(width: $railWidth, range: railMinWidth...maxRail)
@@ -70,7 +73,7 @@ private struct ResizableDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color.primary.opacity(0.08))
+            .fill(Color(nsColor: .separatorColor))
             .frame(width: 1)
             .overlay {
                 Color.clear

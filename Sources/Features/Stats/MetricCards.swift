@@ -24,6 +24,14 @@ private struct MetricCard: View {
 
     var body: some View {
         VStack(spacing: 3) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             if let d = formatDelta(delta) {
                 HStack(spacing: 2) {
                     Text(d.text)
@@ -34,14 +42,6 @@ private struct MetricCard: View {
             } else {
                 Text(" ").font(.caption2)
             }
-            Text(value)
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)

@@ -2,11 +2,36 @@ import SwiftUI
 import SwiftData
 import Charts
 
+enum StatsTab: Hashable { case period, year }
+
 struct StatsView: View {
     @State private var range: StatsRange = .rolling(7)
     @State private var notesOnly = false
+    @State private var tab: StatsTab = .period
 
     var body: some View {
+        VStack(spacing: 0) {
+            Picker("View", selection: $tab) {
+                Text("Period").tag(StatsTab.period)
+                Text("Year").tag(StatsTab.year)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 220)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+
+            Divider()
+
+            switch tab {
+            case .period: periodContent
+            case .year: YearStatsView()
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var periodContent: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center) {
                 StatsRangeBar(range: $range)
@@ -16,11 +41,8 @@ struct StatsView: View {
             .padding(.top, 14)
             .padding(.bottom, 12)
 
-            Divider()
-
             RangedStatsContent(range: range, notesOnly: $notesOnly)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
@@ -59,7 +81,7 @@ private struct RangedStatsContent: View {
 
         if agg.isEmpty {
             ContentUnavailableView(
-                "No focus yet",
+                "No focus in this range",
                 systemImage: "moon.zzz",
                 description: Text("Sessions you finish in this range will show up here.")
             )

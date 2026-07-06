@@ -82,6 +82,20 @@ final class FocusTimerEngine {
         return result
     }
 
+    /// Corrects the session's start time (e.g. you began focusing before hitting
+    /// Start). Only the span between the old and new start is added to / removed
+    /// from focused time; existing pause gaps are left untouched (still excluded).
+    func setStartTime(_ date: Date) {
+        guard phase != .idle, let oldStart = sessionStartedAt else { return }
+        let now = Date()
+        let clamped = min(date, now)
+        let delta = oldStart.timeIntervalSince(clamped)   // > 0 when moving start earlier
+        sessionStartedAt = clamped
+        accumulated = max(0, accumulated + delta)
+        elapsed = accumulated + (segmentStart.map { now.timeIntervalSince($0) } ?? 0)
+        didReachPlanned = planned > 0 && elapsed >= planned
+    }
+
     func reset() {
         stopTicker()
         phase = .idle
