@@ -1,10 +1,15 @@
 import SwiftUI
 import SwiftData
 import AppKit
+import Sparkle
 
 @main
 struct FocusSessionApp: App {
     @State private var engine = FocusTimerEngine.shared
+    // Sparkle auto-updater: checks the appcast, downloads, installs, relaunches.
+    private let updaterController = SPUStandardUpdaterController(startingUpdater: true,
+                                                                updaterDelegate: nil,
+                                                                userDriverDelegate: nil)
     private let modelContainer: ModelContainer = {
         do {
             return try ModelContainerFactory.make()
@@ -19,6 +24,13 @@ struct FocusSessionApp: App {
         }
         .windowResizability(.contentMinSize)
         .modelContainer(modelContainer)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    updaterController.updater.checkForUpdates()
+                }
+            }
+        }
 
         Settings {
             SettingsView()

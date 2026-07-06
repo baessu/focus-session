@@ -37,7 +37,9 @@ xattr -dr com.apple.quarantine /Applications/FocusSession.app
 ```
 
 ### 업데이트
-새 버전이 나오면 [Releases](../../releases/latest)에서 최신 `dmg`를 받아 같은 방식으로 **Applications 폴더에 덮어쓰기** 하면 됩니다. 기존 세션 데이터와 설정은 그대로 유지됩니다. (서명되지 않은 새 빌드는 첫 실행 시 위의 **우클릭 → 열기** 또는 `xattr` 절차가 한 번 더 필요할 수 있습니다.)
+1.1부터 **앱 안에서 자동으로 새 버전을 확인·설치**합니다([Sparkle](https://sparkle-project.org)). 첫 실행 시 자동 확인에 한 번 동의하면 이후 알아서 갱신되고, 메뉴의 **FocusSession → Check for Updates…** 로 수동 확인도 됩니다.
+
+(수동으로 받고 싶으면) [Releases](../../releases/latest)에서 최신 `dmg`를 받아 **Applications 폴더에 덮어쓰기** 해도 됩니다. 기존 세션 데이터·설정은 유지돼요. 서명 없는 빌드라 첫 실행 시 **우클릭 → 열기** 또는 `xattr` 절차가 필요할 수 있습니다.
 
 ### 요구 사항
 - macOS 15 (Sequoia) 이상
@@ -56,6 +58,8 @@ xattr -dr com.apple.quarantine /Applications/FocusSession.app
 ```
 
 프로젝트 파일(`FocusSession.xcodeproj`)은 `project.yml`에서 생성되므로 저장소에 포함되지 않습니다. Xcode로 직접 열려면 `xcodegen generate` 후 `.xcodeproj`를 여세요.
+
+새 버전을 자동 업데이트로 배포하는 방법(Sparkle 키 생성·서명·appcast)은 [docs/auto-update.md](docs/auto-update.md)를 참고하세요. 릴리스는 `./release.sh <version>`으로 빌드·서명·appcast 갱신까지 한 번에 처리합니다.
 
 ## 기술 스택
 SwiftUI · SwiftData · Swift Charts · Swift 6 (strict concurrency) · XcodeGen

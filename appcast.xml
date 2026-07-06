@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>FocusSession</title>
+    <link>https://github.com/baessu/focus-session</link>
+    <description>FocusSession updates</description>
+    <!-- Update items are generated and signed by ./release.sh (Sparkle's
+         generate_appcast). Commit this file to publish the update. -->
+  </channel>
+</rss>

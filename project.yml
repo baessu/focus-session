@@ -4,6 +4,10 @@ options:
     macOS: "15.0"
   bundleIdPrefix: com.baessu
   createIntermediateGroups: true
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.6.0
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -20,11 +24,23 @@ targets:
     platform: macOS
     sources:
       - Sources
+    dependencies:
+      - package: Sparkle
+    info:
+      path: Sources/App/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        LSApplicationCategoryType: public.app-category.productivity
+        # Auto-update (Sparkle). Replace SUPublicEDKey with the public key printed
+        # by `generate_keys` (private key stays in your Keychain). The appcast is
+        # served from the repo's raw URL.
+        SUFeedURL: https://raw.githubusercontent.com/baessu/focus-session/main/appcast.xml
+        SUPublicEDKey: REPLACE_WITH_YOUR_ED_PUBLIC_KEY
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.baessu.focussession
         CODE_SIGN_ENTITLEMENTS: Sources/App/FocusSession.entitlements
         ENABLE_HARDENED_RUNTIME: YES
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
