@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @AppStorage(SoundKeys.backgroundOn) private var backgroundOn = false
@@ -10,6 +11,7 @@ struct SettingsView: View {
     @AppStorage(PresenceKeys.emoji) private var emoji = ""
     @AppStorage(PresenceKeys.publishTaskName) private var publishTaskName = false
     @FocusState private var nameFocused: Bool
+    @FocusState private var iconFocused: Bool
     @Environment(\.modelContext) private var context
     @State private var syncedCount: Int?
 
@@ -25,18 +27,22 @@ struct SettingsView: View {
                         .focused($nameFocused)
                 }
                 HStack(spacing: 10) {
-                    Text("Emoji")
+                    Text("Display icon")
                     Spacer(minLength: 0)
-                    TextField("🙂", text: $emoji)
+                    TextField("", text: $emoji)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 64)
                         .multilineTextAlignment(.center)
+                        .focused($iconFocused)
+                        .onChange(of: iconFocused) { _, focused in
+                            if focused { NSApp.orderFrontCharacterPalette(nil) }
+                        }
                         .onChange(of: emoji) { _, value in
                             let first = value.first.map(String.init) ?? ""
                             if emoji != first { emoji = first }
                         }
                 }
-                Text("Your avatar in the community. Open the emoji picker with \u{2303}\u{2318}Space. Leave empty to show your initials.")
+                Text("Your avatar in the community. Leave empty to show your initials.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

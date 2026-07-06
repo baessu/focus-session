@@ -31,11 +31,13 @@ enum PresenceDefaultsMigration {
             .appendingPathComponent("Library/Containers/com.baessu.focussession/Data/Library/Preferences/com.baessu.focussession.plist")
         guard let saved = NSDictionary(contentsOf: containerPlist) as? [String: Any] else { return }
 
+        // The container holds the user's real prior identity — prefer it, even if
+        // an interim non-sandbox launch already generated a fresh device id.
         let keys = [
             PresenceKeys.deviceID, PresenceKeys.nickname, PresenceKeys.emoji,
             PresenceKeys.publishTaskName, PresenceKeys.supabaseURL, PresenceKeys.supabaseAnonKey,
         ]
-        for key in keys where defaults.object(forKey: key) == nil {
+        for key in keys {
             if let value = saved[key] { defaults.set(value, forKey: key) }
         }
     }
