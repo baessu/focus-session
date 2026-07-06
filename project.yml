@@ -37,7 +37,7 @@ targets:
         # by `generate_keys` (private key stays in your Keychain). The appcast is
         # served from the repo's raw URL.
         SUFeedURL: https://raw.githubusercontent.com/baessu/focus-session/main/appcast.xml
-        SUPublicEDKey: REPLACE_WITH_YOUR_ED_PUBLIC_KEY
+        SUPublicEDKey: GN51aLdY+rXY6+rVc+zUqjVdacALXjZm/5fZNY/qVfo=
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.baessu.focussession
