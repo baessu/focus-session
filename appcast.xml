@@ -7,6 +7,15 @@
         <!-- Update items are generated and signed by ./release.sh (Sparkle's
          generate_appcast). Commit this file to publish the update. -->
         <item>
+            <title>1.2.2</title>
+            <pubDate>Mon, 06 Jul 2026 21:13:40 +0900</pubDate>
+            <link>https://github.com/baessu/focus-session</link>
+            <sparkle:version>5</sparkle:version>
+            <sparkle:shortVersionString>1.2.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/baessu/focus-session/releases/download/v1.2.2/FocusSession-1.2.2.zip" length="3282806" type="application/octet-stream" sparkle:edSignature="ZH7F88ZvcLbSGuxfgX2Yz1T1p4kWCR/Od/Z9+8ntc/bGPEEUkzhmm73cxzUdu8kZ3RcyrKVMV2Z6wE6FxLGrBw=="/>
+        </item>
+        <item>
             <title>1.2.1</title>
             <pubDate>Mon, 06 Jul 2026 16:44:02 +0900</pubDate>
             <link>https://github.com/baessu/focus-session</link>
