@@ -43,6 +43,10 @@ using (true);
 create index if not exists active_sessions_last_seen_at_idx
 on public.active_sessions (last_seen_at desc);
 
+-- Optional profile emoji shown as the community avatar.
+alter table public.active_sessions
+  add column if not exists emoji text;
+
 create table if not exists public.public_session_summaries (
   id uuid primary key default gen_random_uuid(),
   device_id text not null,

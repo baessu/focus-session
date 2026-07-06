@@ -29,6 +29,11 @@ struct FocusSessionApp: App {
                 Button("Check for Updates…") {
                     updaterController.updater.checkForUpdates()
                 }
+                Button("Send Feedback…") {
+                    if let url = URL(string: "https://github.com/baessu/focus-session/issues/new") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
             }
         }
 

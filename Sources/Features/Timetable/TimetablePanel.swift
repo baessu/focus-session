@@ -78,6 +78,7 @@ private struct TimetableDay: View {
     @State private var editing: EditorTarget?
     @State private var dragStartY: CGFloat?
     @State private var dragCurrentY: CGFloat?
+    @State private var engine = FocusTimerEngine.shared
 
     private let hourHeight: CGFloat = 58
     private let gutter: CGFloat = 50
@@ -147,6 +148,12 @@ private struct TimetableDay: View {
                                     onTap: { editing = .schedule(block) }
                                 )
                             }
+                        }
+                        if Calendar.current.isDateInToday(day),
+                           engine.phase != .idle,
+                           let start = engine.startedAt,
+                           Calendar.current.isDateInToday(start) {
+                            liveBlock(start: start, width: geo.size.width).allowsHitTesting(false)
                         }
                         if Calendar.current.isDateInToday(day) {
                             nowLine.allowsHitTesting(false)
@@ -366,6 +373,19 @@ private struct TimetableDay: View {
         return DraftBlock(y: CGFloat(startMin) * ptPerMinute, height: CGFloat(duration) * ptPerMinute, label: label)
     }
 
+    /// The in-progress focus session, drawn live from the timer engine (start → now).
+    private func liveBlock(start: Date, width: CGFloat) -> some View {
+        let laneWidth = max(40, width - gutter - 10)
+        return TimelineView(.periodic(from: .now, by: 15)) { context in
+            let top = minutesFromDayStart(start) * ptPerMinute
+            let bottom = minutesFromDayStart(context.date) * ptPerMinute
+            let height = max(24, bottom - top)
+            LiveBlockView(title: engine.taskName, paused: engine.phase == .paused)
+                .frame(width: laneWidth, height: height, alignment: .top)
+                .offset(x: gutter, y: top)
+        }
+    }
+
     private func draftBlock(_ draft: DraftBlock, width: CGFloat) -> some View {
         let laneWidth = max(40, width - gutter - 10)
         return RoundedRectangle(cornerRadius: 6)
@@ -454,6 +474,45 @@ private struct ScheduleBlockView: View {
 
     private var timeRange: String {
         "\(block.startedAt.formatted(date: .omitted, time: .shortened)) – \(block.endedAt.formatted(date: .omitted, time: .shortened))"
+    }
+}
+
+/// The currently-running session, shown live on today's timetable.
+private struct LiveBlockView: View {
+    let title: String
+    let paused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulse = false
+
+    var body: some View {
+        let color = Color.accentColor
+        return HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(paused ? Color.secondary : color)
+                        .frame(width: 6, height: 6)
+                        .opacity(!paused && pulse ? 0.3 : 1)
+                    Text(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Focusing" : title)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                }
+                Text(paused ? "Paused" : "In progress")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            Spacer(minLength: 0)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(color.opacity(0.16), in: .rect(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(color, lineWidth: 1.5))
+        .onAppear {
+            if !paused && !reduceMotion {
+                withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) { pulse = true }
+            }
+        }
     }
 }
 

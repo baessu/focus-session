@@ -6,6 +6,7 @@ enum PresenceKeys {
     static let supabaseURL = "presenceSupabaseURL"
     static let supabaseAnonKey = "presenceSupabaseAnonKey"
     static let nickname = "presenceNickname"
+    static let emoji = "presenceEmoji"
     static let deviceID = "presenceDeviceID"
     static let publishTaskName = "presencePublishTaskName"
 }
@@ -18,6 +19,7 @@ enum PresenceDefaults {
 struct PresencePeer: Identifiable, Codable, Equatable {
     let deviceID: String
     let nickname: String
+    let emoji: String?
     let status: String
     let taskTitle: String?
     let categoryColor: String?
@@ -33,6 +35,7 @@ struct PresencePeer: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case deviceID = "device_id"
         case nickname
+        case emoji
         case status
         case taskTitle = "task_title"
         case categoryColor = "category_color"
@@ -105,6 +108,10 @@ final class PresenceService {
         return generated
     }
 
+    var profileEmoji: String {
+        (defaults.string(forKey: PresenceKeys.emoji) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var nickname: String {
         let saved = defaults.string(forKey: PresenceKeys.nickname)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !saved.isEmpty { return saved }
@@ -143,6 +150,7 @@ final class PresenceService {
         let peer = PresencePeer(
             deviceID: deviceID,
             nickname: nickname,
+            emoji: profileEmoji.isEmpty ? nil : profileEmoji,
             status: engine.phase == .paused ? "paused" : "running",
             taskTitle: taskTitle.isEmpty ? nil : taskTitle,
             categoryColor: categoryColor,

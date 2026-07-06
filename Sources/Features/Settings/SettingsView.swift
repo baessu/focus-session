@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(SoundKeys.startVolume) private var startVolume = 0.6
     @AppStorage(SoundKeys.endVolume) private var endVolume = 0.6
     @AppStorage(PresenceKeys.nickname) private var nickname = ""
+    @AppStorage(PresenceKeys.emoji) private var emoji = ""
     @AppStorage(PresenceKeys.publishTaskName) private var publishTaskName = false
     @FocusState private var nameFocused: Bool
     @Environment(\.modelContext) private var context
@@ -23,7 +24,19 @@ struct SettingsView: View {
                         .frame(maxWidth: 220)
                         .focused($nameFocused)
                 }
-                Text("This is the only thing others see. Your real name and device stay private.")
+                HStack(spacing: 10) {
+                    Text("Emoji")
+                    Spacer(minLength: 0)
+                    TextField("🙂", text: $emoji)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 64)
+                        .multilineTextAlignment(.center)
+                        .onChange(of: emoji) { _, value in
+                            let first = value.first.map(String.init) ?? ""
+                            if emoji != first { emoji = first }
+                        }
+                }
+                Text("Your avatar in the community. Open the emoji picker with \u{2303}\u{2318}Space. Leave empty to show your initials.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -34,7 +47,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                ProfilePreview(name: displayName, showsTask: publishTaskName)
+                ProfilePreview(name: displayName, emoji: emoji, showsTask: publishTaskName)
                     .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
 
                 HStack {
@@ -68,6 +81,15 @@ struct SettingsView: View {
 
             Section("Session end sound") {
                 soundPicker(selection: $endSound, volume: $endVolume)
+            }
+
+            Section("Feedback") {
+                Link(destination: URL(string: "https://github.com/baessu/focus-session/issues/new")!) {
+                    Label("Send feedback / report a bug", systemImage: "exclamationmark.bubble")
+                }
+                Text("Opens a new issue on GitHub — ideas and bugs are welcome.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -117,6 +139,7 @@ struct SettingsView: View {
 /// Shows how the person will appear to others in the community radar.
 private struct ProfilePreview: View {
     let name: String
+    let emoji: String
     let showsTask: Bool
 
     private var initials: String {
@@ -129,9 +152,13 @@ private struct ProfilePreview: View {
         HStack(spacing: 10) {
             ZStack {
                 Circle().fill(Color.accentColor.opacity(0.16))
-                Text(initials)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
+                if emoji.isEmpty {
+                    Text(initials)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                } else {
+                    Text(emoji).font(.system(size: 20))
+                }
             }
             .frame(width: 38, height: 38)
 

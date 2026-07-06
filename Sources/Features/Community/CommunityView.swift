@@ -247,11 +247,17 @@ private struct RadarBackdrop: View {
 }
 
 private struct CenterHub: View {
+    @AppStorage(PresenceKeys.emoji) private var myEmoji = ""
+
     var body: some View {
         VStack(spacing: 4) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 30))
-                .foregroundStyle(.tertiary)
+            if myEmoji.isEmpty {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text(myEmoji).font(.system(size: 28))
+            }
             Text("You")
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -306,9 +312,13 @@ private struct PeerNode: View {
             Circle()
                 .fill(color.opacity(0.16))
                 .padding(4)
-            Text(initials)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(color)
+            if let emoji = peer.emoji, !emoji.isEmpty {
+                Text(emoji).font(.system(size: 22))
+            } else {
+                Text(initials)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(color)
+            }
         }
         .frame(width: 50, height: 50)
         .grayscale(peer.isPaused ? 0.85 : 0)
