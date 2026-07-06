@@ -652,26 +652,18 @@ private struct ConnectionIssueFooter: View {
     var presence: PresenceService
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Image(systemName: "wifi.exclamationmark")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                Text("Can't reach the community server right now.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("Retry") { presence.refresh() }
-                    .buttonStyle(.link)
-                    .font(.caption)
-            }
-            if let error = presence.lastError {
-                Text(error)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(4)
-                    .textSelection(.enabled)
-            }
+        HStack(spacing: 8) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.caption)
+                .foregroundStyle(.orange)
+            Text("Can't reach the community server right now.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Retry") { presence.refresh() }
+                .buttonStyle(.link)
+                .font(.caption)
         }
+        .help(presence.lastError ?? "")
     }
 }
