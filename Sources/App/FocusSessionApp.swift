@@ -18,6 +18,11 @@ struct FocusSessionApp: App {
         }
     }()
 
+    init() {
+        // Carry the community identity over from the pre-1.2 sandbox container.
+        PresenceDefaultsMigration.runIfNeeded()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

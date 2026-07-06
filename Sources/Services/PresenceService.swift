@@ -16,6 +16,31 @@ enum PresenceDefaults {
     static let supabasePublishableKey = "sb_publishable_zb9gMwpJ5Im7U9NjdLpzWw_gwgL4zwN"
 }
 
+enum PresenceDefaultsMigration {
+    /// 1.2 dropped the app sandbox, which moves UserDefaults from the sandbox
+    /// container to the standard location. Carry over the community identity
+    /// (device id, name, emoji, settings) once so upgrading users keep their
+    /// profile and published history instead of getting a fresh device id.
+    static func runIfNeeded() {
+        let defaults = UserDefaults.standard
+        let flag = "presenceDefaultsMigratedFromSandbox"
+        guard !defaults.bool(forKey: flag) else { return }
+        defaults.set(true, forKey: flag)
+
+        let containerPlist = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Containers/com.baessu.focussession/Data/Library/Preferences/com.baessu.focussession.plist")
+        guard let saved = NSDictionary(contentsOf: containerPlist) as? [String: Any] else { return }
+
+        let keys = [
+            PresenceKeys.deviceID, PresenceKeys.nickname, PresenceKeys.emoji,
+            PresenceKeys.publishTaskName, PresenceKeys.supabaseURL, PresenceKeys.supabaseAnonKey,
+        ]
+        for key in keys where defaults.object(forKey: key) == nil {
+            if let value = saved[key] { defaults.set(value, forKey: key) }
+        }
+    }
+}
+
 struct PresencePeer: Identifiable, Codable, Equatable {
     let deviceID: String
     let nickname: String
