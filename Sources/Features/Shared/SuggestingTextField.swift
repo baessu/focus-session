@@ -20,6 +20,10 @@ struct SuggestingTextField: View {
     var suggestions: [TaskSuggestion]
     /// `true` uses the big centered setup-card look; `false` a rounded-border field.
     var large: Bool = false
+    /// Subtle background fill that blends into the card, instead of a bordered box.
+    var filled: Bool = false
+    /// Center the text (used on the active timer).
+    var centered: Bool = false
     var onSelect: (TaskSuggestion) -> Void = { _ in }
 
     @FocusState private var focused: Bool
@@ -68,6 +72,15 @@ struct SuggestingTextField: View {
                 .padding(.vertical, 14)
                 .padding(.horizontal, 18)
                 .background(Color.primary.opacity(0.05), in: .rect(cornerRadius: 12))
+        } else if filled {
+            // Blends into the card: no bright bordered box, just a subtle fill.
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .multilineTextAlignment(centered ? .center : .leading)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(Color.primary.opacity(0.05), in: .rect(cornerRadius: 8))
         } else {
             TextField(placeholder, text: $text)
                 .textFieldStyle(.roundedBorder)

@@ -762,7 +762,8 @@ private struct BlockEditor: View {
                 SuggestingTextField(
                     text: $title,
                     placeholder: kind == .focus ? "Task title" : "e.g. Team meeting",
-                    suggestions: kind == .focus ? taskSuggestions : scheduleSuggestions
+                    suggestions: kind == .focus ? taskSuggestions : scheduleSuggestions,
+                    filled: true
                 ) { picked in
                     if let cid = picked.categoryID { categoryID = cid }
                 }
@@ -789,7 +790,10 @@ private struct BlockEditor: View {
 
             DatePicker("Start", selection: $startTime, displayedComponents: .hourAndMinute)
                 .datePickerStyle(.compact)
-            DatePicker("End", selection: $endTime, in: startTime..., displayedComponents: .hourAndMinute)
+            // No `in: startTime...` range here: while `load()` populates a past
+            // block, the picker's stale lower bound (initially .now) would clamp
+            // the real end time up to now. `commit()` enforces end > start instead.
+            DatePicker("End", selection: $endTime, displayedComponents: .hourAndMinute)
                 .datePickerStyle(.compact)
 
             HStack {
@@ -823,8 +827,11 @@ private struct BlockEditor: View {
 
                 field("Note") {
                     TextField("Note", text: $note, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
                         .lineLimit(1...3)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color.primary.opacity(0.05), in: .rect(cornerRadius: 8))
                 }
             } else {
                 Text("Schedule blocks are shown on the timetable only — they don't count toward focus stats or the community.")
@@ -847,6 +854,7 @@ private struct BlockEditor: View {
         }
         .padding(16)
         .frame(width: 280)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear(perform: load)
     }
 

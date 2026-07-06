@@ -90,10 +90,17 @@ struct SettingsView: View {
             }
 
             Section("Feedback") {
-                Link(destination: URL(string: "https://github.com/baessu/focus-session/issues/new")!) {
-                    Label("Send feedback / report a bug", systemImage: "exclamationmark.bubble")
+                Link(destination: feedbackMailURL) {
+                    Label("Send feedback / report a bug", systemImage: "envelope")
                 }
-                Text("Opens a new issue on GitHub — ideas and bugs are welcome.")
+                Text("Opens your mail app to write to heymoana321@gmail.com — ideas and bugs are welcome.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Link(destination: URL(string: "https://buymeacoffee.com/heymoana")!) {
+                    Label("Buy me a coffee", systemImage: "cup.and.saucer")
+                }
+                Text("Enjoying FocusSession? A coffee helps keep it going.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -115,6 +122,11 @@ struct SettingsView: View {
     private var displayName: String {
         let trimmed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? PresenceService.shared.nickname : trimmed
+    }
+
+    private var feedbackMailURL: URL {
+        let subject = "FocusSession Feedback".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        return URL(string: "mailto:heymoana321@gmail.com?subject=\(subject)")!
     }
 
     @ViewBuilder

@@ -62,7 +62,9 @@ struct TimerView: View {
                 } else {
                     GeometryReader { geo in
                         ScrollView {
-                            ActiveCard(engine: engine, accent: accent, accentHex: accentHex) { result in
+                            ActiveCard(engine: engine, accent: accent, accentHex: accentHex,
+                                       taskSuggestions: taskSuggestions,
+                                       selectedCategoryID: $selectedCategoryID) { result in
                                 if result.focusedSeconds > 0 { pendingResult = result }
                             }
                             .padding(28)
@@ -426,6 +428,8 @@ private struct ActiveCard: View {
     @Bindable var engine: FocusTimerEngine
     var accent: Color
     var accentHex: String
+    var taskSuggestions: [TaskSuggestion]
+    @Binding var selectedCategoryID: PersistentIdentifier?
     var onEnd: (SessionResult) -> Void
     @State private var confirmingCancel = false
     @AppStorage("timerShowsRemaining") private var showsRemaining = true
@@ -434,6 +438,18 @@ private struct ActiveCard: View {
     var body: some View {
         VStack(spacing: 15) {
             VStack(spacing: 24) {
+                SuggestingTextField(
+                    text: $engine.taskName,
+                    placeholder: "Name this session",
+                    suggestions: taskSuggestions,
+                    filled: true,
+                    centered: true
+                ) { picked in
+                    if let cid = picked.categoryID { selectedCategoryID = cid }
+                }
+                .frame(maxWidth: 260)
+                .zIndex(1)
+
                 ProgressRing(
                     progress: ringFraction,
                     accent: accent,
@@ -444,6 +460,7 @@ private struct ActiveCard: View {
                 .frame(width: 240, height: 240)
                 .contentShape(Circle())
                 .onTapGesture { showsRemaining.toggle() }
+                .padding(.vertical, 24)
 
                 HStack(spacing: 6) {
                     Image(systemName: "clock")
@@ -455,6 +472,7 @@ private struct ActiveCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
+            .zIndex(1)
 
             VStack(spacing: 12) {
                 HStack(spacing: 14) {
@@ -518,9 +536,7 @@ private struct ActiveCard: View {
     }
 
     private var caption: String {
-        let name = engine.taskName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if engine.phase == .paused { return name.isEmpty ? "Paused" : "Paused · \(name)" }
-        return name.isEmpty ? "Focusing" : name
+        engine.phase == .paused ? "Paused" : "Focusing"
     }
 
     private func minimize(remaining: Bool) {

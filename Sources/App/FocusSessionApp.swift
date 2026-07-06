@@ -35,7 +35,13 @@ struct FocusSessionApp: App {
                     updaterController.updater.checkForUpdates()
                 }
                 Button("Send Feedback…") {
-                    if let url = URL(string: "https://github.com/baessu/focus-session/issues/new") {
+                    let subject = "FocusSession Feedback".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    if let url = URL(string: "mailto:heymoana321@gmail.com?subject=\(subject)") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                Button("Buy Me a Coffee…") {
+                    if let url = URL(string: "https://buymeacoffee.com/heymoana") {
                         NSWorkspace.shared.open(url)
                     }
                 }
