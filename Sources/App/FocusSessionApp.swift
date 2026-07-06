@@ -23,6 +23,7 @@ struct FocusSessionApp: App {
         Settings {
             SettingsView()
         }
+        .modelContainer(modelContainer)
 
         // A live countdown in the menu bar, present only while a session runs.
         MenuBarExtra(isInserted: .constant(engine.phase != .idle)) {

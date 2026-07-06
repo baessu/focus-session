@@ -9,6 +9,8 @@ struct SettingsView: View {
     @AppStorage(PresenceKeys.nickname) private var nickname = ""
     @AppStorage(PresenceKeys.publishTaskName) private var publishTaskName = false
     @FocusState private var nameFocused: Bool
+    @Environment(\.modelContext) private var context
+    @State private var syncedCount: Int?
 
     var body: some View {
         Form {
@@ -34,6 +36,23 @@ struct SettingsView: View {
 
                 ProfilePreview(name: displayName, showsTask: publishTaskName)
                     .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+
+                HStack {
+                    Button {
+                        syncedCount = backfillCommunity(context: context)
+                    } label: {
+                        Label("Re-sync my sessions", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    Spacer(minLength: 0)
+                    if let syncedCount {
+                        Text("\(syncedCount) queued")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text("Publishes your recent sessions (last 35 days) to the weekly leaderboard, including ones added on the timetable.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {

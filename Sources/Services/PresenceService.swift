@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftData
 
 enum PresenceKeys {
     static let supabaseURL = "presenceSupabaseURL"
@@ -43,6 +44,7 @@ struct PresencePeer: Identifiable, Codable, Equatable {
 }
 
 struct PublicSessionSummary: Codable {
+    var clientID: UUID?
     let deviceID: String
     let nickname: String
     let startedAt: Date
@@ -53,6 +55,7 @@ struct PublicSessionSummary: Codable {
     let ratingRaw: Int
 
     enum CodingKeys: String, CodingKey {
+        case clientID = "client_id"
         case deviceID = "device_id"
         case nickname
         case startedAt = "started_at"
@@ -156,22 +159,35 @@ final class PresenceService {
         Task { await deleteCurrent() }
     }
 
-    func publishCompletedSession(result: SessionResult, elapsedSeconds: Int, endedAt: Date, rating: FocusRating, categoryColor: String?) {
+    /// Publish (or update) a completed session's summary, keyed by a stable
+    /// client id so editing the same session updates its row instead of adding one.
+    func publishFocusSession(clientID: UUID, startedAt: Date, endedAt: Date, elapsedSeconds: Int,
+                             taskTitle: String?, categoryColor: String?, rating: FocusRating) {
         guard isConfigured, elapsedSeconds > 0 else { return }
-        let publishTaskName = defaults.bool(forKey: PresenceKeys.publishTaskName)
-        let taskTitle = publishTaskName ? result.taskName.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        let shareTask = defaults.bool(forKey: PresenceKeys.publishTaskName)
+        let trimmed = shareTask ? (taskTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") : ""
         let summary = PublicSessionSummary(
+            clientID: clientID,
             deviceID: deviceID,
             nickname: nickname,
-            startedAt: result.startedAt,
+            startedAt: startedAt,
             endedAt: endedAt,
             elapsedSeconds: elapsedSeconds,
-            taskTitle: taskTitle.isEmpty ? nil : taskTitle,
+            taskTitle: trimmed.isEmpty ? nil : trimmed,
             categoryColor: categoryColor,
             ratingRaw: rating.rawValue
         )
         Task {
-            await insert(summary)
+            await upsert(summary)
+            await fetchLeaderboard()
+        }
+    }
+
+    /// Remove a session's summary from the community (deleted or converted away).
+    func unpublishFocusSession(clientID: UUID) {
+        guard isConfigured else { return }
+        Task {
+            await deleteSummary(clientID: clientID)
             await fetchLeaderboard()
         }
     }
@@ -285,15 +301,36 @@ final class PresenceService {
         }
     }
 
-    private func insert(_ summary: PublicSessionSummary) async {
+    private func upsert(_ summary: PublicSessionSummary) async {
         guard let endpoint, let headers else { return }
-        let url = endpoint.appending(path: "rest/v1/public_session_summaries")
+        guard var components = URLComponents(url: endpoint.appending(path: "rest/v1/public_session_summaries"), resolvingAgainstBaseURL: false) else { return }
+        components.queryItems = [URLQueryItem(name: "on_conflict", value: "client_id")]
+        guard let url = components.url else { return }
 
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+            request.setValue("resolution=merge-duplicates", forHTTPHeaderField: "Prefer")
             request.httpBody = try JSONEncoder.presence.encode(summary)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try validate(response, data: data)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func deleteSummary(clientID: UUID) async {
+        guard let endpoint, let headers else { return }
+        guard var components = URLComponents(url: endpoint.appending(path: "rest/v1/public_session_summaries"), resolvingAgainstBaseURL: false) else { return }
+        components.queryItems = [URLQueryItem(name: "client_id", value: "eq.\(clientID.uuidString)")]
+        guard let url = components.url else { return }
+
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "DELETE"
+            headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
             let (data, response) = try await URLSession.shared.data(for: request)
             try validate(response, data: data)
             lastError = nil
@@ -427,6 +464,57 @@ final class PresenceService {
     }
 }
 
+// MARK: - Community publishing helpers (any completed FocusSession)
+
+/// Publish or update a session's community summary, assigning a stable public id
+/// on first publish. Works for timer-completed and timetable-created/edited sessions.
+@MainActor
+func publishSessionToCommunity(_ session: FocusSession, context: ModelContext) {
+    guard session.endedAt != nil, session.elapsedSeconds > 0 else { return }
+    if session.publicID == nil {
+        session.publicID = UUID()
+        try? context.save()
+    }
+    guard let id = session.publicID, let endedAt = session.endedAt else { return }
+    PresenceService.shared.publishFocusSession(
+        clientID: id,
+        startedAt: session.startedAt,
+        endedAt: endedAt,
+        elapsedSeconds: session.elapsedSeconds,
+        taskTitle: session.activity?.name,
+        categoryColor: session.activity?.category?.colorHex,
+        rating: session.rating
+    )
+}
+
+/// Remove a session's summary from the community (on delete / convert to schedule).
+@MainActor
+func unpublishSessionFromCommunity(_ session: FocusSession) {
+    if let id = session.publicID {
+        PresenceService.shared.unpublishFocusSession(clientID: id)
+    }
+}
+
+/// One-time backfill: publish all recent completed sessions to the community
+/// (upsert is idempotent, so re-running is safe). Returns how many were queued.
+@MainActor
+@discardableResult
+func backfillCommunity(context: ModelContext, days: Int = 35) -> Int {
+    let cal = Calendar.current
+    let cutoff = cal.date(byAdding: .day, value: -days, to: cal.startOfDay(for: Date())) ?? Date()
+    let abandoned = SessionOutcome.abandonedIdle.rawValue
+    let descriptor = FetchDescriptor<FocusSession>(
+        predicate: #Predicate { s in
+            s.endedAt != nil && s.elapsedSeconds > 0 && s.startedAt >= cutoff && s.outcomeRaw != abandoned
+        }
+    )
+    guard let sessions = try? context.fetch(descriptor) else { return 0 }
+    for session in sessions {
+        publishSessionToCommunity(session, context: context)
+    }
+    return sessions.count
+}
+
 private enum PresenceError: LocalizedError {
     case requestFailed(String)
 
@@ -439,16 +527,24 @@ private enum PresenceError: LocalizedError {
 
 private enum PresenceDateCoding {
     nonisolated static func string(from date: Date) -> String {
-        formatter.string(from: date)
+        fractional.string(from: date)
     }
 
+    /// Postgres omits the fractional part for whole-second timestamps, so accept
+    /// both `...:00.000Z` and `...:00Z`.
     nonisolated static func date(from value: String) -> Date? {
-        formatter.date(from: value)
+        fractional.date(from: value) ?? plain.date(from: value)
     }
 
-    private nonisolated static var formatter: ISO8601DateFormatter {
+    private nonisolated static var fractional: ISO8601DateFormatter {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }
+
+    private nonisolated static var plain: ISO8601DateFormatter {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }
 }

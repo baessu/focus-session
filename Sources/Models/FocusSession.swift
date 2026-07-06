@@ -13,6 +13,7 @@ final class FocusSession {
     var outcomeRaw: Int = 0
     var ratingRaw: Int = 1          // focus quality: 0 distracted, 1 neutral, 2 focused
     var note: String = ""
+    var publicID: UUID?             // stable id for the community summary (upsert/delete)
 
     var activity: Activity?
 

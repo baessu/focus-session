@@ -603,6 +603,7 @@ private struct SessionBlockView: View {
         session.startedAt = newStart
         session.endedAt = newStart.addingTimeInterval(Double(elapsed))
         try? context.save()
+        publishSessionToCommunity(session, context: context)
     }
 
     private func commitTop(_ dy: CGFloat) {
@@ -614,6 +615,7 @@ private struct SessionBlockView: View {
         session.elapsedSeconds = Int(end.timeIntervalSince(newStart))
         session.endedAt = end
         try? context.save()
+        publishSessionToCommunity(session, context: context)
     }
 
     private func commitBottom(_ dy: CGFloat) {
@@ -622,6 +624,7 @@ private struct SessionBlockView: View {
         session.elapsedSeconds = newElapsed
         session.endedAt = session.startedAt.addingTimeInterval(Double(newElapsed))
         try? context.save()
+        publishSessionToCommunity(session, context: context)
     }
 }
 
@@ -832,19 +835,24 @@ private struct BlockEditor: View {
             s.elapsedSeconds = seconds
             s.rating = rating
             s.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            try? context.save()
+            publishSessionToCommunity(s, context: context)
 
         case (.schedule(let b), .schedule):
             b.title = cleanTitle.isEmpty ? "Schedule" : cleanTitle
             b.startedAt = startTime
             b.endedAt = safeEnd
             b.colorHex = colorHex
+            try? context.save()
 
         case (.focus(let s), .schedule):   // convert focus → schedule
+            unpublishSessionFromCommunity(s)
             let old = s.activity
             context.delete(s)
             cleanupOrphan(old, excluding: s)
             context.insert(ScheduleBlock(title: cleanTitle.isEmpty ? "Schedule" : cleanTitle,
                                          startedAt: startTime, endedAt: safeEnd, colorHex: colorHex))
+            try? context.save()
 
         case (.schedule(let b), .focus):   // convert schedule → focus
             context.delete(b)
@@ -855,15 +863,17 @@ private struct BlockEditor: View {
             session.rating = rating
             session.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
             context.insert(session)
+            try? context.save()
+            publishSessionToCommunity(session, context: context)
         }
 
-        try? context.save()
         onClose()
     }
 
     private func delete() {
         switch target {
         case .focus(let s):
+            unpublishSessionFromCommunity(s)
             let old = s.activity
             context.delete(s)
             cleanupOrphan(old, excluding: s)

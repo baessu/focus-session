@@ -77,3 +77,26 @@ on public.public_session_summaries (started_at desc);
 
 create index if not exists public_session_summaries_device_started_idx
 on public.public_session_summaries (device_id, started_at desc);
+
+-- Stable per-session client id so a summary can be upserted/removed (edit, delete,
+-- convert to schedule) instead of piling up duplicate rows.
+alter table public.public_session_summaries
+  add column if not exists client_id uuid;
+
+create unique index if not exists public_session_summaries_client_id_key
+on public.public_session_summaries (client_id);
+
+grant update, delete on public.public_session_summaries to anon;
+
+drop policy if exists "Anonymous devices can update session summaries" on public.public_session_summaries;
+create policy "Anonymous devices can update session summaries"
+on public.public_session_summaries for update
+to anon
+using (true)
+with check (true);
+
+drop policy if exists "Anonymous devices can remove session summaries" on public.public_session_summaries;
+create policy "Anonymous devices can remove session summaries"
+on public.public_session_summaries for delete
+to anon
+using (true);

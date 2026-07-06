@@ -161,13 +161,7 @@ struct TimerView: View {
         session.note = [userNote, autoNote].filter { !$0.isEmpty }.joined(separator: "\n")
         context.insert(session)
         try? context.save()
-        PresenceService.shared.publishCompletedSession(
-            result: result,
-            elapsedSeconds: elapsed,
-            endedAt: endedAt,
-            rating: rating,
-            categoryColor: category?.colorHex
-        )
+        publishSessionToCommunity(session, context: context)
     }
 
     private func findOrCreateActivity(name: String, category: Category?) -> Activity {
