@@ -64,7 +64,7 @@ struct CategoryManagerSheet: View {
             HStack {
                 Text("Drag the handle to reorder").font(.caption).foregroundStyle(.tertiary)
                 Spacer()
-                Button("Done") { try? context.save(); dismiss() }
+                Button("Done") { context.saveSynced(); dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 16)
@@ -87,7 +87,7 @@ struct CategoryManagerSheet: View {
             let item = ordered.remove(at: from)
             ordered.insert(item, at: to)
             for (i, category) in ordered.enumerated() { category.sortOrder = i }
-            try? context.save()
+            context.saveSynced()
         }
         dragIndex = nil
         dragDY = 0
@@ -97,7 +97,7 @@ struct CategoryManagerSheet: View {
         let nextOrder = (categories.map(\.sortOrder).max() ?? -1) + 1
         let hex = CategoryPalette.swatches[categories.count % CategoryPalette.swatches.count]
         context.insert(Category(name: "New Category", colorHex: hex, sortOrder: nextOrder))
-        try? context.save()
+        context.saveSynced()
     }
 }
 
@@ -127,7 +127,7 @@ private struct CategoryManagerRow: View {
             TextField("Name", text: $category.name)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: .infinity)
-                .onChange(of: category.name) { _, _ in try? context.save() }
+                .onChange(of: category.name) { _, _ in context.saveSynced() }
 
             if category.isArchived {
                 Text("Archived").font(.caption2).foregroundStyle(.tertiary)
@@ -135,7 +135,7 @@ private struct CategoryManagerRow: View {
 
             Button {
                 category.isArchived.toggle()
-                try? context.save()
+                context.saveSynced()
             } label: {
                 Image(systemName: category.isArchived ? "tray.and.arrow.up" : "archivebox")
                     .foregroundStyle(.secondary)
@@ -179,7 +179,7 @@ private struct CategoryManagerRow: View {
                     .overlay(Circle().stroke(.primary, lineWidth: category.colorHex == swatch ? 2.5 : 0))
                     .onTapGesture {
                         category.colorHex = swatch
-                        try? context.save()
+                        context.saveSynced()
                         showingColors = false
                     }
             }

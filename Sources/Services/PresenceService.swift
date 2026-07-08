@@ -316,6 +316,76 @@ final class PresenceService {
         }
     }
 
+    /// One-time recovery after local data loss: rebuild `FocusSession` rows from
+    /// this device's community summaries. Task names were never uploaded, so
+    /// recovered sessions carry only time, rating, and the category color —
+    /// grouped under a "(recovered)" activity per category. Summaries already
+    /// present locally (matched by `publicID`) are skipped, so it is safe to run
+    /// more than once.
+    func recoverSessionsFromServer(context: ModelContext) async -> (inserted: Int, total: Int) {
+        guard let endpoint, let headers else { return (0, 0) }
+        guard var components = URLComponents(url: endpoint.appending(path: "rest/v1/public_session_summaries"),
+                                             resolvingAgainstBaseURL: false) else { return (0, 0) }
+        components.queryItems = [
+            URLQueryItem(name: "device_id", value: "eq.\(deviceID)"),
+            URLQueryItem(name: "select", value: "*"),
+            URLQueryItem(name: "order", value: "started_at.asc"),
+        ]
+        guard let url = components.url else { return (0, 0) }
+
+        let summaries: [PublicSessionSummary]
+        do {
+            var request = URLRequest(url: url)
+            headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try validate(response, data: data)
+            summaries = try JSONDecoder.presence.decode([PublicSessionSummary].self, from: data)
+        } catch {
+            lastError = error.localizedDescription
+            return (0, 0)
+        }
+
+        let existing = (try? context.fetch(FetchDescriptor<FocusSession>())) ?? []
+        let existingPublicIDs = Set(existing.compactMap(\.publicID))
+        let categories = (try? context.fetch(FetchDescriptor<Category>())) ?? []
+
+        var recoveredActivities: [String: Activity] = [:]   // colorHex -> "(recovered)" activity
+        var inserted = 0
+
+        for summary in summaries {
+            guard let clientID = summary.clientID, !existingPublicIDs.contains(clientID) else { continue }
+
+            let colorHex = summary.categoryColor ?? "#8E8E93"
+            let activity = recoveredActivities[colorHex] ?? {
+                let category = categories.first { $0.colorHex == colorHex }
+                let a = Activity(name: "(recovered)", category: category)
+                a.syncID = UUID()
+                context.insert(a)
+                recoveredActivities[colorHex] = a
+                return a
+            }()
+
+            let planned = max(1, Int((Double(summary.elapsedSeconds) / 60).rounded()))
+            let session = FocusSession(
+                startedAt: summary.startedAt,
+                endedAt: summary.endedAt,
+                plannedMinutes: planned,
+                elapsedSeconds: summary.elapsedSeconds,
+                outcome: .completed,
+                activity: activity
+            )
+            session.ratingRaw = summary.ratingRaw
+            session.publicID = clientID
+            session.syncID = UUID()
+            session.updatedAt = .now
+            context.insert(session)
+            inserted += 1
+        }
+
+        try? context.save()
+        return (inserted, summaries.count)
+    }
+
     private func upsert(_ peer: PresencePeer) async {
         guard let endpoint, let headers else { return }
         guard var components = URLComponents(url: endpoint.appending(path: "rest/v1/active_sessions"), resolvingAgainstBaseURL: false) else { return }

@@ -14,6 +14,8 @@ final class FocusSession {
     var ratingRaw: Int = 1          // focus quality: 0 distracted, 1 neutral, 2 focused
     var note: String = ""
     var publicID: UUID?             // stable id for the community summary (upsert/delete)
+    var syncID: UUID?               // portable id for cross-device folder sync
+    var updatedAt: Date?            // last local mutation (optional so old stores migrate lightly)
 
     var activity: Activity?
 

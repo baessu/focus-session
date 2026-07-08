@@ -33,18 +33,24 @@ struct StatsMetrics {
         avgSessionSeconds = sessions.isEmpty ? 0 : total / sessions.count
         longestSeconds = sessions.map(\.elapsedSeconds).max() ?? 0
 
-        var hourAcc: [Int: Int] = [:]
+        var hourAcc: [Int: Double] = [:]
         var hourQualityAcc: [Int: (weightedRating: Int, seconds: Int, sessions: Int, focused: Int)] = [:]
         for s in sessions {
-            let hour = cal.component(.hour, from: s.startedAt)
-            hourAcc[hour, default: 0] += s.elapsedSeconds
+            // Peak hour: spread the focused time across every clock hour the
+            // session actually spans, so a long session isn't dumped entirely
+            // into its start hour.
+            for (hour, seconds) in Self.hourlyDistribution(of: s, calendar: cal) {
+                hourAcc[hour, default: 0] += seconds
+            }
 
+            // Quality buckets (best focus hour) stay keyed by start hour.
+            let startHour = cal.component(.hour, from: s.startedAt)
             let rating = min(2, max(0, s.ratingRaw))
-            hourQualityAcc[hour, default: (0, 0, 0, 0)].weightedRating += rating * s.elapsedSeconds
-            hourQualityAcc[hour, default: (0, 0, 0, 0)].seconds += s.elapsedSeconds
-            hourQualityAcc[hour, default: (0, 0, 0, 0)].sessions += 1
+            hourQualityAcc[startHour, default: (0, 0, 0, 0)].weightedRating += rating * s.elapsedSeconds
+            hourQualityAcc[startHour, default: (0, 0, 0, 0)].seconds += s.elapsedSeconds
+            hourQualityAcc[startHour, default: (0, 0, 0, 0)].sessions += 1
             if rating == FocusRating.focused.rawValue {
-                hourQualityAcc[hour, default: (0, 0, 0, 0)].focused += 1
+                hourQualityAcc[startHour, default: (0, 0, 0, 0)].focused += 1
             }
         }
         peakHour = hourAcc.max { $0.value < $1.value }?.key
@@ -74,6 +80,35 @@ struct StatsMetrics {
         var prevCat: [String: Int] = [:]
         for s in previous { prevCat[s.activity?.category?.name ?? StatsAggregator.uncategorizedName, default: 0] += s.elapsedSeconds }
         prevCategorySeconds = prevCat
+    }
+
+    /// Splits a session's focused seconds across every clock hour it spans,
+    /// weighted by the wall-clock overlap with each hour. Pauses (which sit in
+    /// the start→end span but not in `elapsedSeconds`) are spread evenly by
+    /// scaling the overlap so the parts sum back to `elapsedSeconds`.
+    private static func hourlyDistribution(of s: FocusSession, calendar cal: Calendar) -> [Int: Double] {
+        let elapsed = Double(s.elapsedSeconds)
+        guard let end = s.endedAt else {
+            return [cal.component(.hour, from: s.startedAt): elapsed]
+        }
+        let span = end.timeIntervalSince(s.startedAt)
+        guard span > 0 else {
+            return [cal.component(.hour, from: s.startedAt): elapsed]
+        }
+
+        var result: [Int: Double] = [:]
+        var cursor = s.startedAt
+        while cursor < end {
+            let hour = cal.component(.hour, from: cursor)
+            let nextBoundary = cal.nextDate(after: cursor,
+                                            matching: DateComponents(minute: 0, second: 0),
+                                            matchingPolicy: .nextTime) ?? end
+            let segmentEnd = min(nextBoundary, end)
+            let overlap = segmentEnd.timeIntervalSince(cursor)
+            result[hour, default: 0] += overlap / span * elapsed
+            cursor = segmentEnd
+        }
+        return result
     }
 
     func hourLabel(_ h: Int) -> String {

@@ -11,6 +11,8 @@ final class ScheduleBlock {
     var endedAt: Date = Date.now
     var colorHex: String = "#8E8E93"
     var createdAt: Date = Date.now
+    var syncID: UUID?               // portable id for cross-device folder sync
+    var updatedAt: Date?            // last local mutation (optional so old stores migrate lightly)
 
     var durationSeconds: Int { max(0, Int(endedAt.timeIntervalSince(startedAt))) }
 

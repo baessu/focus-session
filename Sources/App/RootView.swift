@@ -61,7 +61,7 @@ struct RootView: View {
         for (index, (name, hex)) in defaults.enumerated() {
             context.insert(Category(name: name, colorHex: hex, sortOrder: index))
         }
-        try? context.save()
+        context.saveSynced()
     }
 }
 

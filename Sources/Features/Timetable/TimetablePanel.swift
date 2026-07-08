@@ -347,7 +347,7 @@ private struct TimetableDay: View {
             activity: nil
         )
         context.insert(session)
-        try? context.save()
+        context.saveSynced()
         editing = .focus(session)
     }
 
@@ -661,7 +661,7 @@ private struct SessionBlockView: View {
         let newStart = min(max(session.startedAt.addingTimeInterval(Double(snapSeconds(dy))), dayStart), maxStart)
         session.startedAt = newStart
         session.endedAt = newStart.addingTimeInterval(Double(elapsed))
-        try? context.save()
+        context.saveSynced()
         publishSessionToCommunity(session, context: context)
     }
 
@@ -673,7 +673,7 @@ private struct SessionBlockView: View {
         session.startedAt = newStart
         session.elapsedSeconds = Int(end.timeIntervalSince(newStart))
         session.endedAt = end
-        try? context.save()
+        context.saveSynced()
         publishSessionToCommunity(session, context: context)
     }
 
@@ -682,7 +682,7 @@ private struct SessionBlockView: View {
         let newElapsed = min(max(session.elapsedSeconds + snapSeconds(dy), minSeconds), maxElapsed)
         session.elapsedSeconds = newElapsed
         session.endedAt = session.startedAt.addingTimeInterval(Double(newElapsed))
-        try? context.save()
+        context.saveSynced()
         publishSessionToCommunity(session, context: context)
     }
 }
@@ -902,7 +902,7 @@ private struct BlockEditor: View {
             s.elapsedSeconds = seconds
             s.rating = rating
             s.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
-            try? context.save()
+            context.saveSynced()
             publishSessionToCommunity(s, context: context)
 
         case (.schedule(let b), .schedule):
@@ -910,7 +910,7 @@ private struct BlockEditor: View {
             b.startedAt = startTime
             b.endedAt = safeEnd
             b.colorHex = colorHex
-            try? context.save()
+            context.saveSynced()
 
         case (.focus(let s), .schedule):   // convert focus → schedule
             unpublishSessionFromCommunity(s)
@@ -919,7 +919,7 @@ private struct BlockEditor: View {
             cleanupOrphan(old, excluding: s)
             context.insert(ScheduleBlock(title: cleanTitle.isEmpty ? "Schedule" : cleanTitle,
                                          startedAt: startTime, endedAt: safeEnd, colorHex: colorHex))
-            try? context.save()
+            context.saveSynced()
 
         case (.schedule(let b), .focus):   // convert schedule → focus
             context.delete(b)
@@ -930,7 +930,7 @@ private struct BlockEditor: View {
             session.rating = rating
             session.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
             context.insert(session)
-            try? context.save()
+            context.saveSynced()
             publishSessionToCommunity(session, context: context)
         }
 
@@ -947,7 +947,7 @@ private struct BlockEditor: View {
         case .schedule(let b):
             context.delete(b)
         }
-        try? context.save()
+        context.saveSynced()
         onClose()
     }
 

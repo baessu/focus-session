@@ -8,6 +8,8 @@ final class Activity {
     var name: String = ""
     var createdAt: Date = Date.now
     var isArchived: Bool = false
+    var syncID: UUID?               // portable id for cross-device folder sync
+    var updatedAt: Date?            // last local mutation (optional so old stores migrate lightly)
 
     var category: Category?
 

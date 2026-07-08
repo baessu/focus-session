@@ -162,7 +162,7 @@ struct TimerView: View {
         let userNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         session.note = [userNote, autoNote].filter { !$0.isEmpty }.joined(separator: "\n")
         context.insert(session)
-        try? context.save()
+        context.saveSynced()
         publishSessionToCommunity(session, context: context)
     }
 
@@ -291,7 +291,7 @@ private struct CategoryPicker: View {
             AddCategorySheet(nextSortOrder: categories.count) { name, hex in
                 let category = Category(name: name, colorHex: hex, sortOrder: categories.count)
                 context.insert(category)
-                try? context.save()
+                context.saveSynced()
                 selectedID = category.id
             }
         }
@@ -373,7 +373,7 @@ private struct CategoryPicker: View {
         if selectedID == category.id {
             selectedID = categories.first { $0.id != category.id }?.id
         }
-        try? context.save()
+        context.saveSynced()
     }
 }
 

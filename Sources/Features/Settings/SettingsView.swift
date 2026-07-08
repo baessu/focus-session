@@ -14,6 +14,9 @@ struct SettingsView: View {
     @FocusState private var iconFocused: Bool
     @Environment(\.modelContext) private var context
     @State private var syncedCount: Int?
+    @State private var sync = SyncService.shared
+    @State private var recovering = false
+    @State private var recoverResult: String?
 
     var body: some View {
         Form {
@@ -72,6 +75,78 @@ struct SettingsView: View {
                 Text("Publishes your recent sessions (last 35 days) to the weekly leaderboard, including ones added on the timetable.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                HStack {
+                    Button {
+                        recovering = true
+                        recoverResult = nil
+                        Task {
+                            let result = await PresenceService.shared.recoverSessionsFromServer(context: context)
+                            recovering = false
+                            recoverResult = "\(result.inserted) recovered · \(result.total) on server"
+                        }
+                    } label: {
+                        Label("Recover sessions from server", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(recovering)
+                    Spacer(minLength: 0)
+                    if recovering {
+                        ProgressView().controlSize(.small)
+                    } else if let recoverResult {
+                        Text(recoverResult).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Text("Lost your local history? This rebuilds sessions from your community summaries (time and rating only — task names weren't uploaded). Safe to run repeatedly.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Sync across devices") {
+                if let path = sync.folderPath {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sync folder").font(.caption).foregroundStyle(.secondary)
+                            Text(shortPath(path))
+                                .font(.callout)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer(minLength: 8)
+                        Button("Change") { pickSyncFolder() }
+                        Button("Remove") { sync.clearFolder() }
+                    }
+
+                    HStack {
+                        Button {
+                            sync.syncNow(context: context)
+                        } label: {
+                            Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(sync.isSyncing)
+                        Spacer(minLength: 0)
+                        if sync.isSyncing {
+                            ProgressView().controlSize(.small)
+                        } else if let last = sync.lastSync {
+                            Text("Last synced \(last.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let error = sync.lastError {
+                        Text(error).font(.caption).foregroundStyle(.red)
+                    }
+                    Text("Your sessions are saved as a file in this folder and merged across your Macs. Nothing is sent to a server.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button { pickSyncFolder() } label: {
+                        Label("Choose sync folder…", systemImage: "folder.badge.plus")
+                    }
+                    Text("Pick a folder your other Mac also syncs (iCloud Drive, Dropbox, …). FocusSession keeps your data there — no server, no account.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
@@ -122,6 +197,24 @@ struct SettingsView: View {
     private var displayName: String {
         let trimmed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? PresenceService.shared.nickname : trimmed
+    }
+
+    private func pickSyncFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "Pick a folder inside your iCloud Drive, Dropbox, or another synced location."
+        if panel.runModal() == .OK, let url = panel.url {
+            sync.setFolder(url)
+        }
+    }
+
+    /// Shows the last two path components so a long folder path stays readable.
+    private func shortPath(_ path: String) -> String {
+        let parts = path.split(separator: "/")
+        return parts.suffix(2).joined(separator: "/")
     }
 
     private var feedbackMailURL: URL {
